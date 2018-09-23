@@ -188,12 +188,16 @@ cd MEC-Malt
 mv Correl_STD-MALT_Num_8.tif Correl_STD-MALT_Num_8_FullRes.tif
 cp Z_Num9_DeZoom1_STD-MALT.tfw Correl_STD-MALT_Num_8_FullRes.tfw
 gdal_translate -tr $RESTERR $RESTERR -r cubicspline -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" Correl_STD-MALT_Num_8_FullRes.tif Correl_STD-MALT_Num_8.tif
+
 mv AutoMask_STD-MALT_Num_8.tif AutoMask_STD-MALT_Num_8_FullRes.tif
 cp Z_Num9_DeZoom1_STD-MALT.tfw AutoMask_STD-MALT_Num_8_FullRes.tfw
 gdal_translate -tr $RESTERR $RESTERR -r cubicspline -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" AutoMask_STD-MALT_Num_8_FullRes.tif AutoMask_STD-MALT_Num_8.tif
+
+mosaic_micmac_tiles.py -filename 'Z_Num9_DeZoom1_STD-MALT' 
 mv Z_Num9_DeZoom1_STD-MALT.tif Z_Num9_DeZoom1_STD-MALT_FullRes.tif
 mv Z_Num9_DeZoom1_STD-MALT.tfw Z_Num9_DeZoom1_STD-MALT_FullRes.tfw
 mv Z_Num9_DeZoom1_STD-MALT.xml Z_Num9_DeZoom1_STD-MALT_FullRes.xml
+
 gdal_translate -tr $RESTERR $RESTERR -r cubicspline -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" -co TFW=YES Z_Num9_DeZoom1_STD-MALT_FullRes.tif Z_Num9_DeZoom1_STD-MALT.tif
 cd ..
 
@@ -205,15 +209,14 @@ gdal_translate -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" -a_n
 rm TrackAngleMap_nonGT*
 
 
-
-
 cd Ortho-MEC-Malt
 # if there are no tiles, we have nothing to do.
+# not sure if we want to hard-code that the tiles will always be Nx1?
 if [ -f Orthophotomosaic_Tile_0_0.tif ]; then
     montage Orthophotomosaic_T*.tif -mode concatenate -tile 1x  Orthophotomosaic_FullRes.tif
 else
     cp Orthophotomosaic.tif Orthophotomosaic_FullRes.tif
 fi
 mv Orthophotomosaic.tfw Orthophotomosaic_FullRes.tfw
-gdal_translate -tr 15 15 -r cubicspline -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" Orthophotomosaic_FullRes.tif Orthophotomosaic.tif
+gdal_translate -tr 15 15 -r bilinear -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" Orthophotomosaic_FullRes.tif Orthophotomosaic.tif
 cd ..

@@ -15,17 +15,20 @@ def arrange_tiles(flist, args):
     img_arr = np.array(np.zeros((nrows, ncols)), dtype='object')
     for i in range(nrows):
          for j in range(ncols):
-             img_arr[i, j] = imread(os.path.sep.join([args.imgdir, 'Z_Num9_DeZoom1_STD-MALT_Tile_{}_{}.tif'.format(j, i)]))
+             img_arr[i, j] = imread(os.path.sep.join([args.imgdir, '{}_Tile_{}_{}.tif'.format(args.filename, j, i)]))
     return img_arr
 
 
 def main():
     parser = argparse.ArgumentParser(description="Re-stitch images tiled by MicMac.",
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('-imgdir', action='store', type=str, default='MEC-Malt', help='Directory containing images [MEC-Malt]')
+    parser.add_argument('-filename', action='store', type=str, default='Z_Num9_DeZoom1_STD-MALT',
+                        help="MicMac filename to tile [Z_Num9_DeZoom1_STD-MALT]")
+    parser.add_argument('-imgdir', action='store', type=str, default='.',
+                        help="Directory containing images [.]")
     args = parser.parse_args()
     
-    filelist = glob(os.path.sep.join([args.imgdir, 'Z_Num9_DeZoom1_STD-MALT_Tile*']))
+    filelist = glob(os.path.sep.join([args.imgdir, '{}_Tile*'.format(args.filename)]))
     
     tiled = arrange_tiles(filelist, args)
     I, J = tiled.shape
@@ -36,7 +39,7 @@ def main():
         
     img = np.concatenate(arr_cols, axis=1)
     
-    imsave(os.path.sep.join([args.imgdir, 'Z_Num9_DeZoom1_STD-MALT.tif']), img)
+    imsave(os.path.sep.join([args.imgdir, '{}.tif'.format(args.filename)]), img)
     
 
 if __name__ == "__main__":
