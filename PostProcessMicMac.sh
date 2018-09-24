@@ -63,10 +63,10 @@ resize_rasters () {
     fi
     # get the upper left and lower right corners of image1
     ul=$(gdalinfo $image1 | grep 'Upper Left' | grep -Eo '[+-]?[0-9]*\.[0-9]*\,\s*?[+-]?[0-9]*\.[0-9]*' )
-    lr=$(gdalinfo $image2 | grep 'Lower Right' | grep -Eo '[+-]?[0-9]*\.[0-9]*\,\s*[+-]?[0-9]*\.[0-9]*' )
+    lr=$(gdalinfo $image1 | grep 'Lower Right' | grep -Eo '[+-]?[0-9]*\.[0-9]*\,\s*[+-]?[0-9]*\.[0-9]*' )
     # split into two arrays    
-    ul_arr=($(echo $ul | tr -d ,))
-    lr_arr=($(echo $lr | tr -d ,))
+    ul_arr=($(echo $ul | tr , ' '))
+    lr_arr=($(echo $lr | tr , ' '))
     echo "gdalwarp -te ${ul_arr[0]} ${lr_arr[1]} ${lr_arr[0]} ${ul_arr[1]} -ts ${img1size[@]} $image2 ${image2%.tif}_resize.tif"
     echo "Re-sizing $image2 to agree with $image1 size."
     gdalwarp -te ${ul_arr[0]} ${lr_arr[1]} ${lr_arr[0]} ${ul_arr[1]} -ts ${img1size[@]} $image2 ${image2%.tif}_resize.tif
