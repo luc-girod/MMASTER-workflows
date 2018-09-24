@@ -62,8 +62,8 @@ resize_rasters () {
         return 1
     fi
     # get the upper left and lower right corners of image1
-    ul=$(gdalinfo $image1 | grep 'Upper Left' | grep -Eo '[+-]?[0-9]*\.[0-9]*\, [0-9]*\.[0-9]*' )
-    lr=$(gdalinfo $image1 | grep 'Lower Right' | grep -Eo '[+-]?[0-9]*\.[0-9]*\, [0-9]*\.[0-9]*' )
+    ul=$(gdalinfo $image1 | grep 'Upper Left' | grep -Eo '[+-]?[0-9]*\.[0-9]*\,\s*?[+-]?[0-9]*\.[0-9]*' )
+    lr=$(gdalinfo $image2 | grep 'Lower Right' | grep -Eo '[+-]?[0-9]*\.[0-9]*\,\s*[+-]?[0-9]*\.[0-9]*' )
     # split into two arrays    
     ul_arr=($(echo $ul | tr -d ,))
     lr_arr=($(echo $lr | tr -d ,))

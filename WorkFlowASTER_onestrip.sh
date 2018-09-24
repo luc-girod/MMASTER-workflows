@@ -191,7 +191,7 @@ gdal_translate -tr $RESTERR $RESTERR -r cubicspline -a_srs "+proj=utm +zone=$UTM
 
 mv AutoMask_STD-MALT_Num_8.tif AutoMask_STD-MALT_Num_8_FullRes.tif
 cp Z_Num9_DeZoom1_STD-MALT.tfw AutoMask_STD-MALT_Num_8_FullRes.tfw
-gdal_translate -tr $RESTERR $RESTERR -r cubicspline -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" AutoMask_STD-MALT_Num_8_FullRes.tif AutoMask_STD-MALT_Num_8.tif
+gdal_translate -tr $RESTERR $RESTERR -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" AutoMask_STD-MALT_Num_8_FullRes.tif AutoMask_STD-MALT_Num_8.tif
 
 mosaic_micmac_tiles.py -filename 'Z_Num9_DeZoom1_STD-MALT' 
 mv Z_Num9_DeZoom1_STD-MALT.tif Z_Num9_DeZoom1_STD-MALT_FullRes.tif
@@ -204,6 +204,11 @@ cd ..
 # computing orbit angles on DEM
 mm3d SateLib ASTERProjAngle MEC-Malt/Z_Num9_DeZoom1_STD-MALT MEC-Malt/AutoMask_STD-MALT_Num_8.tif $name$N
 cp MEC-Malt/Z_Num9_DeZoom1_STD-MALT.tfw TrackAngleMap_nonGT.tfw
+
+if [ -f TrackAngleMap_Tile_0_0.tif ]; then
+    mosaic_micmac_tiles.py -filename 'TrackAngleMap'
+fi
+
 mv TrackAngleMap.tif TrackAngleMap_nonGT.tif
 gdal_translate -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" -a_nodata 0 TrackAngleMap_nonGT.tif TrackAngleMap.tif
 rm TrackAngleMap_nonGT*
@@ -213,10 +218,9 @@ cd Ortho-MEC-Malt
 # if there are no tiles, we have nothing to do.
 # not sure if we want to hard-code that the tiles will always be Nx1?
 if [ -f Orthophotomosaic_Tile_0_0.tif ]; then
-    montage Orthophotomosaic_T*.tif -mode concatenate -tile 1x  Orthophotomosaic_FullRes.tif
-else
-    cp Orthophotomosaic.tif Orthophotomosaic_FullRes.tif
+    mosaic_micmac_tiles.py -filename 'Orthophotomosaic'
 fi
+mv Orthophotomosaic.tif Orthophotomosaic_FullRes.tif
 mv Orthophotomosaic.tfw Orthophotomosaic_FullRes.tfw
 gdal_translate -tr 15 15 -r bilinear -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" Orthophotomosaic_FullRes.tif Orthophotomosaic.tif
 cd ..
