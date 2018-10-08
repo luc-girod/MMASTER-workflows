@@ -12,10 +12,11 @@ NoCorDEM=false #default don't compute uncorrected DEM
 ZoomF=1 #this has to be passed to PostProcessMicMac, and WorkFlowPt2
 RESTERR=30
 do_ply=false #default no ply point cloud generation
+do_angle=false
 
 # figure out what options we were passed: 
 #":hz:wnc:f:t:pr" 
-while getopts "z:c:q:w:nf:t:yprh" opt; do
+while getopts "z:c:q:w:nf:t:yaprh" opt; do
   case $opt in
     h)
       echo "Run the MicMac-based ASTER DEM pipeline from start to finish."
@@ -29,6 +30,7 @@ while getopts "z:c:q:w:nf:t:yprh" opt; do
       echo "    -f ZOOMF    : Run with different final resolution   (optional; default: 1)"
       echo "    -t RESTERR  : Run with different terrain resolution (optional; default: 30)"
       echo "    -y do_ply   : Write point cloud (DEM drapped with ortho in ply)"
+      echo "    -a do_angle : Compute track angle along orbit"
       echo "    -p  	: Purge results and run fresh from .zip files."
       echo "    -r  	: Re-process, but don't purge everything."
       echo "    -h  	: displays this message and exits."
@@ -59,6 +61,10 @@ while getopts "z:c:q:w:nf:t:yprh" opt; do
 	  echo "Point cloud (.ply) will be exported"
       do_ply=true
       ;;
+    a)
+	  echo "Orbit angles will be exported"
+      do_angle=true
+      ;; 
     f)
       ZoomF=$OPTARG
       echo "ZoomF set to $ZoomF"

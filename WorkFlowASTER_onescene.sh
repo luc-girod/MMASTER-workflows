@@ -21,9 +21,10 @@ CorThr=0.7
 SzW=5
 nameWaterMask=false
 do_ply=false
+do_angle=false
 NoCorDEM=false
 
-while getopts "s:z:c:q:w:nf:t:yh" opt; do
+while getopts "s:z:c:q:w:nf:t:y:a:h" opt; do
   case $opt in
     h)
       echo "Run the second step in the MMASTER processing chain."
@@ -32,11 +33,12 @@ while getopts "s:z:c:q:w:nf:t:yh" opt; do
       echo "    -z UTMZONE  : UTM Zone of area of interest. Takes form 'NN +north(south)'"
       echo "    -c CorThr   : Correlation Threshold for estimates of Z min and max (optional, default : 0.7)"
       echo "    -q SzW      : Size of the correlation window in the last step (optional, default : 4, mean 9*9)"
-      echo "    -w mask     : Name of shapefile to skip masked areas (usually water, this is optional, default : false)."
+      echo "    -w mask     : Name of shapefile to skip masked areas (usually water, this is optional, default : none)."
       echo "    -n NoCorDEM : Compute DEM with the uncorrected 3B image (computing with correction as well)"
       echo "    -f ZOOMF    : Run with different final resolution   (optional; default: 1)"
       echo "    -t RESTERR  : Run with different terrain resolution (optional; default: 30)"
       echo "    -y do_ply   : Write point cloud (DEM drapped with ortho in ply)"
+      echo "    -a do_angle : Compute track angle along orbit"
       echo "    -h          : displays this message and exits."
       echo " "
       exit 0
@@ -44,6 +46,9 @@ while getopts "s:z:c:q:w:nf:t:yh" opt; do
     n)
       NoCorDEM=$OPTARG
       ;;
+    a)
+      do_angle=$OPTARG
+      ;; 
     y)
       do_ply=$OPTARG
       ;;    
@@ -201,12 +206,20 @@ mv Z_Num9_DeZoom1_STD-MALT.xml Z_Num9_DeZoom1_STD-MALT_FullRes.xml
 gdal_translate -tr $RESTERR $RESTERR -r cubicspline -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" -co TFW=YES Z_Num9_DeZoom1_STD-MALT_FullRes.tif Z_Num9_DeZoom1_STD-MALT.tif
 cd ..
 
-# computing orbit angles on DEM
-mm3d SateLib ASTERProjAngle MEC-Malt/Z_Num9_DeZoom1_STD-MALT MEC-Malt/AutoMask_STD-MALT_Num_8.tif $name$N
-cp MEC-Malt/Z_Num9_DeZoom1_STD-MALT.tfw TrackAngleMap_nonGT.tfw
-mv TrackAngleMap.tif TrackAngleMap_nonGT.tif
-gdal_translate -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" -a_nodata 0 TrackAngleMap_nonGT.tif TrackAngleMap.tif
-rm TrackAngleMap_nonGT*
+if [ "$do_angle" = true ]; then
+	# computing orbit angles on DEM
+	mm3d SateLib ASTERProjAngle MEC-Malt/Z_Num9_DeZoom1_STD-MALT MEC-Malt/AutoMask_STD-MALT_Num_8.tif $name$N
+	cp MEC-Malt/Z_Num9_DeZoom1_STD-MALT.tfw TrackAngleMap_nonGT.tfw
+	mv TrackAngleMap.tif TrackAngleMap_nonGT.tif
+	gdal_translate -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" -a_nodata 0 TrackAngleMap_nonGT.tif TrackAngleMap_3N.tif
+	rm TrackAngleMap_nonGT*
+	mm3d SateLib ASTERProjAngle MEC-Malt/Z_Num9_DeZoom1_STD-MALT MEC-Malt/AutoMask_STD-MALT_Num_8.tif $name$B
+	cp MEC-Malt/Z_Num9_DeZoom1_STD-MALT.tfw TrackAngleMap_nonGT.tfw
+	mv TrackAngleMap.tif TrackAngleMap_nonGT.tif
+	gdal_translate -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" -a_nodata 0 TrackAngleMap_nonGT.tif TrackAngleMap_3B.tif
+	rm TrackAngleMap_nonGT*
+fi
+
 
 cd Ortho-MEC-Malt
 mv Orthophotomosaic.tif Orthophotomosaic_FullRes.tif
