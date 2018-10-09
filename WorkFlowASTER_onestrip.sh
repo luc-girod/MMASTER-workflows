@@ -68,7 +68,7 @@ while getopts "s:z:c:q:wnf:t:y:a:h" opt; do
       echo "SzW set to $SzW"
       ;;
     w)
-      echo "Water mask selected: " $OPTARG
+e     echo "Water mask selected: " $OPTARG
 	  nameWaterMask=$OPTARG
       ;;
     f)
@@ -198,16 +198,15 @@ mv AutoMask_STD-MALT_Num_8.tif AutoMask_STD-MALT_Num_8_FullRes.tif
 cp Z_Num9_DeZoom1_STD-MALT.tfw AutoMask_STD-MALT_Num_8_FullRes.tfw
 gdal_translate -tr $RESTERR $RESTERR -r cubicspline -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" AutoMask_STD-MALT_Num_8_FullRes.tif AutoMask_STD-MALT_Num_8.tif
 
-mosaic_micmac_tiles.py -filename 'Z_Num9_DeZoom1_STD-MALT' 
+if [ -f Z_Num9_DeZoom1_STD-MALT_Tile_0_0.tif ]; then
+	mosaic_micmac_tiles.py -filename 'Z_Num9_DeZoom1_STD-MALT' 
+fi
 mv Z_Num9_DeZoom1_STD-MALT.tif Z_Num9_DeZoom1_STD-MALT_FullRes.tif
 mv Z_Num9_DeZoom1_STD-MALT.tfw Z_Num9_DeZoom1_STD-MALT_FullRes.tfw
 mv Z_Num9_DeZoom1_STD-MALT.xml Z_Num9_DeZoom1_STD-MALT_FullRes.xml
 
 gdal_translate -tr $RESTERR $RESTERR -r cubicspline -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" -co TFW=YES Z_Num9_DeZoom1_STD-MALT_FullRes.tif Z_Num9_DeZoom1_STD-MALT.tif
 cd ..
-
-
-
 
 if [ "$do_angle" = true ]; then
 	# computing orbit angles on DEM
@@ -235,7 +234,7 @@ cd Ortho-MEC-Malt
 # if there are no tiles, we have nothing to do.
 # not sure if we want to hard-code that the tiles will always be Nx1?
 if [ -f Orthophotomosaic_Tile_0_0.tif ]; then
-    mosaic_micmac_tiles.py -filename 'Orthophotomosaic'
+	mosaic_micmac_tiles.py -filename 'Orthophotomosaic'
 fi
 mv Orthophotomosaic.tif Orthophotomosaic_FullRes.tif
 mv Orthophotomosaic.tfw Orthophotomosaic_FullRes.tfw
