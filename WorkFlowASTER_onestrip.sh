@@ -23,7 +23,7 @@ do_ply=false
 do_angle=false
 NoCorDEM=false
 
-while getopts "s:z:c:q:wnf:t:y:a:h" opt; do
+while getopts "s:z:c:q:wnf:t:y:ah" opt; do
   case $opt in
     h)
       echo "Run the second step in the MMASTER processing chain."
@@ -46,7 +46,7 @@ while getopts "s:z:c:q:wnf:t:y:a:h" opt; do
       NoCorDEM=$OPTARG
       ;;
     a)
-      do_angle=$OPTARG
+      do_angle=true
       ;;  
     y)
       do_ply=$OPTARG
