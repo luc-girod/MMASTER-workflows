@@ -156,6 +156,7 @@ for dir in ${subList[@]}; do
 			rm -v $dir\_V123.tif
 			cd ../
 		fi
+		cp -v TrackAngleMap*.tif $outdir/$datestr/
 	else
 		echo "No directory MEC-Malt found in $dir. Exiting."
 	fi
