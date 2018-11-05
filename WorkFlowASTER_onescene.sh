@@ -23,8 +23,9 @@ nameWaterMask=false
 do_ply=false
 do_angle=false
 NoCorDEM=false
+fitVersion=1
 
-while getopts "s:z:c:q:w:nf:t:y:ah" opt; do
+while getopts "s:z:c:q:w:nf:t:yai:h" opt; do
   case $opt in
     h)
       echo "Run the second step in the MMASTER processing chain."
@@ -39,6 +40,7 @@ while getopts "s:z:c:q:w:nf:t:y:ah" opt; do
       echo "    -t RESTERR  : Run with different terrain resolution (optional; default: 30)"
       echo "    -y do_ply   : Write point cloud (DEM drapped with ortho in ply)"
       echo "    -a do_angle : Compute track angle along orbit"
+      echo "    -i fitVersion : Version of Cross-track FitASTER to be used (Def 1, 2 availiable)"
       echo "    -h          : displays this message and exits."
       echo " "
       exit 0
@@ -71,6 +73,10 @@ while getopts "s:z:c:q:w:nf:t:y:ah" opt; do
     w)
       echo "Water mask selected: " $OPTARG
 	  nameWaterMask=$OPTARG
+      ;;
+    i)
+      echo "ASTER Fit Version: " $OPTARG
+	  fitVersion=$OPTARG
       ;;
     f)
       ZoomF=$OPTARG
@@ -173,7 +179,7 @@ mm3d Malt Ortho ".*$name(|_3N|_3B).tif" GRIBin ImMNT="$name(_3N|_3B).tif" ImOrth
 fi
 
 #Applying correction to the 3B image
-mm3d SateLib ApplyParralaxCor $name$Bt GeoI-Px/Px2_Num16_DeZoom1_Geom-Im.tif FitASTER=1 ExportFitASTER=1
+mm3d SateLib ApplyParralaxCor $name$Bt GeoI-Px/Px2_Num16_DeZoom1_Geom-Im.tif FitASTER=$fitVersion ExportFitASTER=1 ASTERSceneName=$name
 mkdir ImOrig
 mv $name$Bt ImOrig/$name$Bt
 mv $name$Bcor $name$Bt
