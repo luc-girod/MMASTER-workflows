@@ -142,7 +142,7 @@ if [ $run_again -eq 1 ]; then
 	    unzip $f -d "$f1/RawData"
 	    mv "$f" "$f1"
 	    echo "start=\$SECONDS" >> ProcessAll.sh
-	    echo "WorkFlowASTER_onescene.sh -c " $CorThr " -q " $SzW " -s " $f1 " -z \""$UTMZone"\" -w " $nameWaterMask " -f " $ZoomF " -t " $RESTERR " -n " $NoCorDEM  " -y " $do_ply " -a " $doAngle " -i " $fitVersion >> ProcessAll.sh
+	    echo "WorkFlowASTER_onescene.sh -c " $CorThr " -q " $SzW " -s " $f1 " -z \""$UTMZone"\" -w " $nameWaterMask " -f " $ZoomF " -t " $RESTERR " -n " $NoCorDEM  " -y " $do_ply " -a " $do_angle " -i " $fitVersion >> ProcessAll.sh
 	    echo "duration=\$(( SECONDS - start ))" >> ProcessAll.sh
 	    echo "echo Procesing of " $f1 " took \" \$duration \" s to process >> Timings.txt" >> ProcessAll.sh
 	done  
