@@ -25,7 +25,7 @@ do_angle=false
 NoCorDEM=false
 fitVersion=1
 
-while getopts "s:z:c:q:w:nf:t:yai:h" opt; do
+while getopts "s:z:c:q:w:nf:t:y:a:i:h" opt; do
   case $opt in
     h)
       echo "Run the second step in the MMASTER processing chain."
@@ -38,8 +38,8 @@ while getopts "s:z:c:q:w:nf:t:yai:h" opt; do
       echo "    -n NoCorDEM : Compute DEM with the uncorrected 3B image (computing with correction as well)"
       echo "    -f ZOOMF    : Run with different final resolution   (optional; default: 1)"
       echo "    -t RESTERR  : Run with different terrain resolution (optional; default: 30)"
-      echo "    -y do_ply   : Write point cloud (DEM drapped with ortho in ply)"
-      echo "    -a do_angle : Compute track angle along orbit"
+      echo "    -y do_ply   : Write point cloud (DEM drapped with ortho in ply, def false))"
+      echo "    -a do_angle : Compute track angle along orbit (def false)"
       echo "    -i fitVersion : Version of Cross-track FitASTER to be used (Def 1, 2 availiable)"
       echo "    -h          : displays this message and exits."
       echo " "
@@ -49,9 +49,12 @@ while getopts "s:z:c:q:w:nf:t:yai:h" opt; do
       NoCorDEM=$OPTARG
       ;;
     a)
+      echo "Computing projected orbit angles"
       do_angle=true
       ;; 
     y)
+	
+      echo "Making ply output: $OPTARG"
       do_ply=$OPTARG
       ;;    
     s)
