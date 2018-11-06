@@ -29,7 +29,7 @@ while getopts "s:z:c:q:w:n:f:t:y:a:i:h" opt; do
   case $opt in
     h)
       echo "Run the second step in the MMASTER processing chain."
-      echo "usage: WorkflowASTER_GT_Pt2.sh -s SCENENAME -z 'UTMZONE' -f ZOOMF -t RESTERR -w false -h"
+      echo "usage: WorkFlowASTER_onescene.sh -s SCENENAME -z 'UTMZONE' -f ZOOMF -t RESTERR -w false -h"
       echo "    -s SCENENAME: Aster scenename/folder where data is located."
       echo "    -z UTMZONE  : UTM Zone of area of interest. Takes form 'NN +north(south)'"
       echo "    -c CorThr   : Correlation Threshold for estimates of Z min and max (optional, default : 0.7)"
