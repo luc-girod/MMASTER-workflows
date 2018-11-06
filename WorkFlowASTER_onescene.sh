@@ -25,7 +25,7 @@ do_angle=false
 NoCorDEM=false
 fitVersion=1
 
-while getopts "s:z:c:q:w:nf:t:y:a:i:h" opt; do
+while getopts "s:z:c:q:w:n:f:t:y:a:i:h" opt; do
   case $opt in
     h)
       echo "Run the second step in the MMASTER processing chain."
@@ -35,7 +35,7 @@ while getopts "s:z:c:q:w:nf:t:y:a:i:h" opt; do
       echo "    -c CorThr   : Correlation Threshold for estimates of Z min and max (optional, default : 0.7)"
       echo "    -q SzW      : Size of the correlation window in the last step (optional, default : 4, mean 9*9)"
       echo "    -w mask     : Name of shapefile to skip masked areas (usually water, this is optional, default : none)."
-      echo "    -n NoCorDEM : Compute DEM with the uncorrected 3B image (computing with correction as well)"
+      echo "    -n NoCorDEM : Compute DEM with the uncorrected 3B image (computing with correction as well, def false)"
       echo "    -f ZOOMF    : Run with different final resolution   (optional; default: 1)"
       echo "    -t RESTERR  : Run with different terrain resolution (optional; default: 30)"
       echo "    -y do_ply   : Write point cloud (DEM drapped with ortho in ply, def false))"
