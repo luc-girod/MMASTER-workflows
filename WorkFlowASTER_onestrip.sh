@@ -18,7 +18,7 @@ ZoomF=1
 RESTERR=30
 CorThr=0.7
 SzW=5
-water_mask=false
+nameWaterMask=false
 do_ply=false
 do_angle=false
 NoCorDEM=false
@@ -181,7 +181,7 @@ mv $name$Bt ImOrig/$name$Bt
 mv $name$Bcor $name$Bt
 
 # if we're using a water mask, we run that here.
-if [ "$nameWaterMask" != false ]; then #check variable name!
+if [ "$nameWaterMask" != false ]; then
     WorkFlow_WaterMask.sh $name "$UTM" $nameWaterMask
 fi
 
