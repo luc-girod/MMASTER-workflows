@@ -3,6 +3,7 @@
 # extra options :  -t 30 -n false -c 0.7 -w false -f 1
 
 utm_set=0
+polar_set=0
 run_clean=1
 run_again=1
 CorThr=0.7
@@ -23,25 +24,32 @@ while getopts "z:c:q:w:nf:t:yai:prh" opt; do
       echo "Run the MicMac-based ASTER DEM pipeline from start to finish."
       echo "Call from the the directory where your zip and .met files are."
       echo "usage: RunMicMacAster_batch.sh -z 'UTMZONE' -f ZOOMF -t RESTERR -wrph"
-      echo "    -z UTMZONE    : UTM Zone of area of interest. Takes form 'NN +north(south)'"
-      echo "    -c CorThr     : Correlation Threshold for estimates of Z min and max (optional, default : 0.7)"
-      echo "    -q SzW        : Size of the correlation window in the last step (optional, default : 2, mean 5*5)"
-      echo "    -w            : Name of shapefile to skip masked areas (usually water, this is optional, default : false)."
-      echo "    -n NoCorDEM   : Compute DEM with the uncorrected 3B image (computing with correction as well)"
-      echo "    -f ZOOMF      : Run with different final resolution   (optional; default: 1)"
-      echo "    -t RESTERR    : Run with different terrain resolution (optional; default: 30)"
-      echo "    -y do_ply     : Write point cloud (DEM drapped with ortho in ply)"
-      echo "    -a do_angle   : Compute track angle along orbit"
-      echo "    -i fitVersion : Version of Cross-track FitASTER to be used (Def 1, 2 availiable)"
-      echo "    -p  	      : Purge results and run fresh from .zip files."
-      echo "    -r  	      : Re-process, but don't purge everything."
-      echo "    -h  	      : displays this message and exits."
+      echo "    -z UTMZONE      : Use UTM Zone of area of interest. Takes form 'NN +north(south)'"
+      echo "    -p PolarStereo  : Use polar stereo (option N for north EPSG:3411 or S for south EPSG:3412)"
+      echo "    -c CorThr       : Correlation Threshold for estimates of Z min and max (optional, default : 0.7)"
+      echo "    -q SzW          : Size of the correlation window in the last step (optional, default : 2, mean 5*5)"
+      echo "    -w              : Name of shapefile to skip masked areas (usually water, this is optional, default : false)."
+      echo "    -n NoCorDEM     : Compute DEM with the uncorrected 3B image (computing with correction as well)"
+      echo "    -f ZOOMF        : Run with different final resolution   (optional; default: 1)"
+      echo "    -t RESTERR      : Run with different terrain resolution (optional; default: 30)"
+      echo "    -y do_ply       : Write point cloud (DEM drapped with ortho in ply)"
+      echo "    -a do_angle     : Compute track angle along orbit"
+      echo "    -i fitVersion   : Version of Cross-track FitASTER to be used (Def 1, 2 availiable)"
+      echo "    -p  	        : Purge results and run fresh from .zip files."
+      echo "    -r  	        : Re-process, but don't purge everything."
+      echo "    -h  	        : displays this message and exits."
       echo " "
       exit 0
       ;;
     z)
       UTMZone=$OPTARG
       utm_set=1
+      proj_set=1
+      ;;
+    p)
+      PolarZone=$OPTARG
+      polar_set=1
+      proj_set=1
       ;;    
 	c)
       CorThr=$OPTARG
@@ -98,8 +106,8 @@ while getopts "z:c:q:w:nf:t:yai:prh" opt; do
   esac
 done
 
-if [ $utm_set -eq 0 ]; then
-      echo "Error: UTM Zone has not been set."
+if [ $proj_set -eq 0 ]; then
+      echo "Error: Projection has not been set."
       echo "call RunMicMacAster_batch.sh -h for details on usage."
       echo " "
       exit 1
@@ -142,7 +150,12 @@ if [ $run_again -eq 1 ]; then
 	    unzip $f -d "$f1/RawData"
 	    mv "$f" "$f1"
 	    echo "start=\$SECONDS" >> ProcessAll.sh
-	    echo "WorkFlowASTER_onescene.sh -c " $CorThr " -q " $SzW " -s " $f1 " -z \""$UTMZone"\" -w " $nameWaterMask " -f " $ZoomF " -t " $RESTERR " -n " $NoCorDEM  " -y " $do_ply " -a " $do_angle " -i " $fitVersion >> ProcessAll.sh
+		if [ $utm_set -eq 1 ]; then
+			echo "WorkFlowASTER_onescene.sh -c " $CorThr " -q " $SzW " -s " $f1 " -z \""$UTMZone"\" -w " $nameWaterMask " -f " $ZoomF " -t " $RESTERR " -n " $NoCorDEM  " -y " $do_ply " -a " $do_angle " -i " $fitVersion >> ProcessAll.sh
+		fi
+		if [ $polar_set -eq 1 ]; then
+			echo "WorkFlowASTER_onescene.sh -c " $CorThr " -q " $SzW " -s " $f1 " -p \""$PolarZone"\" -w " $nameWaterMask " -f " $ZoomF " -t " $RESTERR " -n " $NoCorDEM  " -y " $do_ply " -a " $do_angle " -i " $fitVersion >> ProcessAll.sh
+		fi
 	    echo "duration=\$(( SECONDS - start ))" >> ProcessAll.sh
 	    echo "echo Procesing of " $f1 " took \" \$duration \" s to process >> Timings.txt" >> ProcessAll.sh
 	done  

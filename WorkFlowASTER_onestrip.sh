@@ -12,7 +12,7 @@ Bt="_3B.tif"
 Bcor="_3B.tif_corrected.tif"
 RPC="RPC_"
 scene_set=0
-utm_set=0
+proj_set=0
 # add default values for ZoomF, RESTERR, CorThr, water_mask and NoCorDEM
 ZoomF=1
 RESTERR=30
@@ -24,23 +24,24 @@ do_angle=false
 NoCorDEM=false
 fitVersion=1
 
-while getopts "s:z:c:q:wnf:t:y:ai:h" opt; do
+while getopts "s:z:p:c:q:wnf:t:y:ai:h" opt; do
   case $opt in
     h)
       echo "Run the second step in the MMASTER processing chain."
       echo "usage: WorkFlowASTER_onestrip.sh -s SCENENAME -z 'UTMZONE' -f ZOOMF -t RESTERR -w false -h"
-      echo "    -s SCENENAME: Folder where zips of stips are located."
-      echo "    -z UTMZONE  : UTM Zone of area of interest. Takes form 'NN +north(south)'"
-      echo "    -c CorThr   : Correlation Threshold for estimates of Z min and max (optional, default : 0.7)"
-      echo "    -q SzW      : Size of the correlation window in the last step (optional, default : 4, mean 9*9)"
-      echo "    -w mask     : Name of shapefile to skip masked areas (usually water, this is optional, default : none)."
-      echo "    -n NoCorDEM : Compute DEM with the uncorrected 3B image (computing with correction as well)"
-      echo "    -f ZOOMF    : Run with different final resolution   (optional; default: 1)"
-      echo "    -t RESTERR  : Run with different terrain resolution (optional; default: 30)"
-      echo "    -y do_ply   : Write point cloud (DEM drapped with ortho in ply)"
-      echo "    -a do_angle : Compute track angle along orbit"
-      echo "    -i fitVersion : Version of Cross-track FitASTER to be used (Def 1, 2 availiable)"
-      echo "    -h          : displays this message and exits."
+      echo "    -s SCENENAME    : Folder where zips of stips are located."
+      echo "    -z UTMZONE      : Use UTM Zone of area of interest. Takes form 'NN +north(south)'"
+      echo "    -p PolarStereo  : Use polar stereo (option N for north EPSG:3411 or S for south EPSG:3412)"
+      echo "    -c CorThr       : Correlation Threshold for estimates of Z min and max (optional, default : 0.7)"
+      echo "    -q SzW          : Size of the correlation window in the last step (optional, default : 4, mean 9*9)"
+      echo "    -w mask         : Name of shapefile to skip masked areas (usually water, this is optional, default : none)."
+      echo "    -n NoCorDEM     : Compute DEM with the uncorrected 3B image (computing with correction as well)"
+      echo "    -f ZOOMF        : Run with different final resolution   (optional; default: 1)"
+      echo "    -t RESTERR      : Run with different terrain resolution (optional; default: 30)"
+      echo "    -y do_ply       : Write point cloud (DEM drapped with ortho in ply)"
+      echo "    -a do_angle     : Compute track angle along orbit"
+      echo "    -i fitVersion   : Version of Cross-track FitASTER to be used (Def 1, 2 availiable)"
+      echo "    -h              : displays this message and exits."
       echo " "
       exit 0
       ;;
@@ -58,8 +59,19 @@ while getopts "s:z:c:q:wnf:t:y:ai:h" opt; do
       scene_set=1
       ;;
     z)
-      UTM=$OPTARG
-      utm_set=1
+      proj="+proj=utm +zone=$OPTARG +datum=WGS84 +units=m +no_defs"
+      proj_set=1
+	  echo "Projection set to $proj"
+      ;;  
+    p)
+	  if [ "$OPTARG" = N ]; then
+		proj="+proj=stere +lat_0=90 +lat_ts=70 +lon_0=-45 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
+	  fi
+	  if [ "$OPTARG" = S ]; then
+		proj="+proj=stere +lat_0=-90 +lat_ts=-70 +lon_0=0 +k=1 +x_0=0 +y_0=0 +a=6378273 +b=6356889.449 +units=m +no_defs "
+	  fi
+	  proj_set=1
+	  echo "Projection set to $proj"
       ;;    
     c)
       CorThr=$OPTARG
@@ -70,7 +82,7 @@ while getopts "s:z:c:q:wnf:t:y:ai:h" opt; do
       echo "SzW set to $SzW"
       ;;
     w)
-e     echo "Water mask selected: " $OPTARG
+      echo "Water mask selected: " $OPTARG
 	  nameWaterMask=$OPTARG
       ;;
     f)
@@ -96,7 +108,6 @@ done
 
 #Variable symboles
 echo $name
-echo $UTM
 cd $name
 
 
@@ -125,9 +136,9 @@ pwd
 mm3d Satelib ASTERStrip2MM AST_L1A.* $name
 cd ..
 
-mm3d SateLib Aster2Grid $name$Bx 20 "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
-mm3d SateLib Aster2Grid $name$Nx 20 "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
-mm3d SateLib Aster2Grid "FalseColor_$name.xml" 20 "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
+mm3d SateLib Aster2Grid $name$Bx 20 $proj HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
+mm3d SateLib Aster2Grid $name$Nx 20 $proj HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
+mm3d SateLib Aster2Grid "FalseColor_$name.xml" 20 $proj HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
 
 mm3d Malt Ortho ".*$name(|_3N|_3B).tif" GRIBin ImMNT="$name(_3N|_3B).tif" MOri=GRID ZMoy=2500 ZInc=2500 ZoomF=8 ZoomI=32 ResolTerrain=30 NbVI=2 EZA=1 Regul=0.1 DefCor=$CorThr DoOrtho=0 DirMEC=MEC-Mini
 
@@ -161,9 +172,9 @@ echo Min Max NbLvl Mean Inc >> Stats.txt
 echo $Min $Max $NbLvl $Mean $Inc >> Stats.txt
 
 #Re compute RPCs with updated min/max
-mm3d SateLib Aster2Grid $name$Bx $NbLvl "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" HMin=$Min HMax=$Max expDIMAP=1 expGrid=1
-mm3d SateLib Aster2Grid $name$Nx $NbLvl "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" HMin=$Min HMax=$Max expDIMAP=1 expGrid=1
-mm3d SateLib Aster2Grid "FalseColor_$name.xml" $NbLvl "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" HMin=$Min HMax=$Max expDIMAP=1 expGrid=1
+mm3d SateLib Aster2Grid $name$Bx $NbLvl $proj HMin=$Min HMax=$Max expDIMAP=1 expGrid=1
+mm3d SateLib Aster2Grid $name$Nx $NbLvl $proj HMin=$Min HMax=$Max expDIMAP=1 expGrid=1
+mm3d SateLib Aster2Grid "FalseColor_$name.xml" $NbLvl $proj HMin=$Min HMax=$Max expDIMAP=1 expGrid=1
 
 mm3d MMTestOrient $name$Bt $name$Nt GRIBin PB=1 MOri=GRID ZoomF=1 ZInc=$Inc ZMoy=$Mean
 
@@ -198,11 +209,11 @@ fi
 cd MEC-Malt
 mv Correl_STD-MALT_Num_8.tif Correl_STD-MALT_Num_8_FullRes.tif
 cp Z_Num9_DeZoom1_STD-MALT.tfw Correl_STD-MALT_Num_8_FullRes.tfw
-gdal_translate -tr $RESTERR $RESTERR -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" Correl_STD-MALT_Num_8_FullRes.tif Correl_STD-MALT_Num_8.tif
+gdal_translate -tr $RESTERR $RESTERR -a_srs $proj Correl_STD-MALT_Num_8_FullRes.tif Correl_STD-MALT_Num_8.tif
 
 mv AutoMask_STD-MALT_Num_8.tif AutoMask_STD-MALT_Num_8_FullRes.tif
 cp Z_Num9_DeZoom1_STD-MALT.tfw AutoMask_STD-MALT_Num_8_FullRes.tfw
-gdal_translate -tr $RESTERR $RESTERR -r cubicspline -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" AutoMask_STD-MALT_Num_8_FullRes.tif AutoMask_STD-MALT_Num_8.tif
+gdal_translate -tr $RESTERR $RESTERR -r cubicspline -a_srs $proj AutoMask_STD-MALT_Num_8_FullRes.tif AutoMask_STD-MALT_Num_8.tif
 
 if [ -f Z_Num9_DeZoom1_STD-MALT_Tile_0_0.tif ]; then
 	mosaic_micmac_tiles.py -filename 'Z_Num9_DeZoom1_STD-MALT' 
@@ -211,7 +222,7 @@ mv Z_Num9_DeZoom1_STD-MALT.tif Z_Num9_DeZoom1_STD-MALT_FullRes.tif
 mv Z_Num9_DeZoom1_STD-MALT.tfw Z_Num9_DeZoom1_STD-MALT_FullRes.tfw
 mv Z_Num9_DeZoom1_STD-MALT.xml Z_Num9_DeZoom1_STD-MALT_FullRes.xml
 
-gdal_translate -tr $RESTERR $RESTERR -r cubicspline -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" -co TFW=YES Z_Num9_DeZoom1_STD-MALT_FullRes.tif Z_Num9_DeZoom1_STD-MALT.tif
+gdal_translate -tr $RESTERR $RESTERR -r cubicspline -a_srs $proj -co TFW=YES Z_Num9_DeZoom1_STD-MALT_FullRes.tif Z_Num9_DeZoom1_STD-MALT.tif
 cd ..
 
 if [ "$do_angle" = true ]; then
@@ -222,7 +233,7 @@ if [ "$do_angle" = true ]; then
 	fi
 	cp MEC-Malt/Z_Num9_DeZoom1_STD-MALT.tfw TrackAngleMap_nonGT.tfw
 	mv TrackAngleMap.tif TrackAngleMap_nonGT.tif
-	gdal_translate -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" -a_nodata 0 TrackAngleMap_nonGT.tif TrackAngleMap_3N.tif
+	gdal_translate -a_srs $proj -a_nodata 0 TrackAngleMap_nonGT.tif TrackAngleMap_3N.tif
 	rm TrackAngleMap_nonGT*
 	mm3d SateLib ASTERProjAngle MEC-Malt/Z_Num9_DeZoom1_STD-MALT MEC-Malt/AutoMask_STD-MALT_Num_8.tif $name$B
 	if [ -f TrackAngleMap_3B_Tile_0_0.tif ]; then
@@ -230,7 +241,7 @@ if [ "$do_angle" = true ]; then
 	fi
 	cp MEC-Malt/Z_Num9_DeZoom1_STD-MALT.tfw TrackAngleMap_nonGT.tfw
 	mv TrackAngleMap.tif TrackAngleMap_nonGT.tif
-	gdal_translate -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" -a_nodata 0 TrackAngleMap_nonGT.tif TrackAngleMap_3B.tif
+	gdal_translate -a_srs $proj -a_nodata 0 TrackAngleMap_nonGT.tif TrackAngleMap_3B.tif
 	rm TrackAngleMap_nonGT*
 fi
 
@@ -244,5 +255,5 @@ if [ -f Orthophotomosaic_Tile_0_0.tif ]; then
 fi
 mv Orthophotomosaic.tif Orthophotomosaic_FullRes.tif
 mv Orthophotomosaic.tfw Orthophotomosaic_FullRes.tfw
-gdal_translate -tr 15 15 -r bilinear -a_srs "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" Orthophotomosaic_FullRes.tif Orthophotomosaic.tif
+gdal_translate -tr 15 15 -r bilinear -a_srs $proj Orthophotomosaic_FullRes.tif Orthophotomosaic.tif
 cd ..
