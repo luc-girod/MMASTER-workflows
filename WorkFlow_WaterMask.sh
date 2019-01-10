@@ -5,7 +5,7 @@ echo $1
 echo $2
 echo $3
 name=$1
-UTM=$2
+proj=$2
 nameWaterMask=$3
 
 echo "For scene " $name
@@ -41,8 +41,8 @@ echo $xminUTM $yminUTM > Corner1.txt
 echo $xmaxUTM $ymaxUTM > Corner2.txt
 
 #Conversion of these coordinates in lat long
-cs2cs +proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs +to +proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs -f "%.6f" Corner1.txt > Corner1Deg.txt
-cs2cs +proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs +to +proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs -f "%.6f" Corner2.txt > Corner2Deg.txt
+cs2cs $proj +to +proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs -f "%.6f" Corner1.txt > Corner1Deg.txt
+cs2cs $proj +to +proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs -f "%.6f" Corner2.txt > Corner2Deg.txt
 minDeg=$(grep -P '\d+' Corner1Deg.txt)
 x1Deg=$(echo $minDeg | cut -d " " -f1 )
 y1Deg=$(echo $minDeg | cut -d " " -f2 )
@@ -81,7 +81,7 @@ rm Corner1.txt Corner2.txt Corner1Deg.txt Corner2Deg.txt
 
 mkdir TA
 #Clip the area of interest (using min and max from .met) and convert to UTM
-ogr2ogr -t_srs "+proj=utm +zone=$UTM +ellps=WGS84 +datum=WGS84 +units=m +no_defs" -clipsrc $xminDeg $yminDeg $xmaxDeg $ymaxDeg water_zoneUTM.shp $nameWaterMask
+ogr2ogr -t_srs "$proj" -clipsrc $xminDeg $yminDeg $xmaxDeg $ymaxDeg water_zoneUTM.shp $nameWaterMask
 #Rasterize data using min max from MEC-Mini/Z_Num9_DeZoom1_STD-MALT.xml
 gdal_rasterize -ot Byte -i -burn 255 -of GTiff -tr 30 30 -te $xminUTM $yminUTM $xmaxUTM $ymaxUTM -l water_zoneUTM water_zoneUTM.shp TA/TA_LeChantier_Masq_ini.tif
 rm water_zoneUTM.shp

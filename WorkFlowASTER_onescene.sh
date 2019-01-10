@@ -202,7 +202,7 @@ mv $name$Bcor $name$Bt
 
 # if we're using a water mask, we run that here.
 if [ "$nameWaterMask" != false ]; then #check variable name!
-    WorkFlow_WaterMask.sh $name "$UTM" $nameWaterMask
+    WorkFlow_WaterMask.sh $name "$proj" $nameWaterMask
 fi
 
 # Correlation with corrected image
