@@ -23,7 +23,7 @@ nameWaterMask=false
 do_ply=false
 do_angle=false
 NoCorDEM=false
-fitVersion=1
+fitVersion=2
 
 
 
@@ -43,7 +43,7 @@ while getopts "s:z:o:c:q:w:n:f:t:y:a:i:h" opt; do
       echo "    -t RESTERR      : Run with different terrain resolution (optional; default: 30)"
       echo "    -y do_ply       : Write point cloud (DEM drapped with ortho in ply, def false))"
       echo "    -a do_angle     : Compute track angle along orbit (def false)"
-      echo "    -i fitVersion   : Version of Cross-track FitASTER to be used (Def 1, 2 availiable)"
+      echo "    -i fitVersion   : Version of Cross-track FitASTER to be used (Def 2, 1 availiable)"
       echo "    -h               : displays this message and exits."
       echo " "
       exit 0

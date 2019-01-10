@@ -14,7 +14,7 @@ ZoomF=1 #this has to be passed to PostProcessMicMac, and WorkFlowPt2
 RESTERR=30
 do_ply=false #default no ply point cloud generation
 do_angle=false
-fitVersion=1
+fitVersion=2
 
 # figure out what options we were passed: 
 #":hz:wnc:f:t:pr" 
@@ -34,7 +34,7 @@ while getopts "z:o:c:q:w:nf:t:yai:prh" opt; do
       echo "    -t RESTERR      : Run with different terrain resolution (optional; default: 30)"
       echo "    -y do_ply       : Write point cloud (DEM drapped with ortho in ply)"
       echo "    -a do_angle     : Compute track angle along orbit"
-      echo "    -i fitVersion   : Version of Cross-track FitASTER to be used (Def 1, 2 availiable)"
+      echo "    -i fitVersion   : Version of Cross-track FitASTER to be used (Def 2, 1 availiable)"
       echo "    -p  	        : Purge results and run fresh from .zip files."
       echo "    -r  	        : Re-process, but don't purge everything."
       echo "    -h  	        : displays this message and exits."
