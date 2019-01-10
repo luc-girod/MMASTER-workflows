@@ -68,7 +68,7 @@ while getopts "s:z:o:c:q:wnf:t:y:ai:h" opt; do
 		proj="+proj=stere +lat_0=90 +lat_ts=70 +lon_0=-45 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
 	  fi
 	  if [ "$OPTARG" = S ]; then
-		proj="+proj=stere +lat_0=-90 +lat_ts=-70 +lon_0=0 +k=1 +x_0=0 +y_0=0 +a=6378273 +b=6356889.449 +units=m +no_defs "
+		proj="+proj=stere +lat_0=-90 +lat_ts=-70 +lon_0=0 +k=1 +x_0=0 +y_0=0 +a=6378273 +b=6356889.449 +units=m +no_defs"
 	  fi
 	  proj_set=1
 	  echo "Projection set to $proj"
@@ -136,9 +136,9 @@ pwd
 mm3d Satelib ASTERStrip2MM AST_L1A.* $name
 cd ..
 
-mm3d SateLib Aster2Grid $name$Bx 20 $proj HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
-mm3d SateLib Aster2Grid $name$Nx 20 $proj HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
-mm3d SateLib Aster2Grid "FalseColor_$name.xml" 20 $proj HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
+mm3d SateLib Aster2Grid $name$Bx 20 "$proj" HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
+mm3d SateLib Aster2Grid $name$Nx 20 "$proj" HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
+mm3d SateLib Aster2Grid "FalseColor_$name.xml" 20 "$proj" HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
 
 mm3d Malt Ortho ".*$name(|_3N|_3B).tif" GRIBin ImMNT="$name(_3N|_3B).tif" MOri=GRID ZMoy=2500 ZInc=2500 ZoomF=8 ZoomI=32 ResolTerrain=30 NbVI=2 EZA=1 Regul=0.1 DefCor=$CorThr DoOrtho=0 DirMEC=MEC-Mini
 
@@ -172,9 +172,9 @@ echo Min Max NbLvl Mean Inc >> Stats.txt
 echo $Min $Max $NbLvl $Mean $Inc >> Stats.txt
 
 #Re compute RPCs with updated min/max
-mm3d SateLib Aster2Grid $name$Bx $NbLvl $proj HMin=$Min HMax=$Max expDIMAP=1 expGrid=1
-mm3d SateLib Aster2Grid $name$Nx $NbLvl $proj HMin=$Min HMax=$Max expDIMAP=1 expGrid=1
-mm3d SateLib Aster2Grid "FalseColor_$name.xml" $NbLvl $proj HMin=$Min HMax=$Max expDIMAP=1 expGrid=1
+mm3d SateLib Aster2Grid $name$Bx $NbLvl "$proj" HMin=$Min HMax=$Max expDIMAP=1 expGrid=1
+mm3d SateLib Aster2Grid $name$Nx $NbLvl "$proj" HMin=$Min HMax=$Max expDIMAP=1 expGrid=1
+mm3d SateLib Aster2Grid "FalseColor_$name.xml" $NbLvl "$proj" HMin=$Min HMax=$Max expDIMAP=1 expGrid=1
 
 mm3d MMTestOrient $name$Bt $name$Nt GRIBin PB=1 MOri=GRID ZoomF=1 ZInc=$Inc ZMoy=$Mean
 
@@ -209,11 +209,11 @@ fi
 cd MEC-Malt
 mv Correl_STD-MALT_Num_8.tif Correl_STD-MALT_Num_8_FullRes.tif
 cp Z_Num9_DeZoom1_STD-MALT.tfw Correl_STD-MALT_Num_8_FullRes.tfw
-gdal_translate -tr $RESTERR $RESTERR -a_srs $proj Correl_STD-MALT_Num_8_FullRes.tif Correl_STD-MALT_Num_8.tif
+gdal_translate -tr $RESTERR $RESTERR -a_srs "$proj" Correl_STD-MALT_Num_8_FullRes.tif Correl_STD-MALT_Num_8.tif
 
 mv AutoMask_STD-MALT_Num_8.tif AutoMask_STD-MALT_Num_8_FullRes.tif
 cp Z_Num9_DeZoom1_STD-MALT.tfw AutoMask_STD-MALT_Num_8_FullRes.tfw
-gdal_translate -tr $RESTERR $RESTERR -r cubicspline -a_srs $proj AutoMask_STD-MALT_Num_8_FullRes.tif AutoMask_STD-MALT_Num_8.tif
+gdal_translate -tr $RESTERR $RESTERR -r cubicspline -a_srs "$proj" AutoMask_STD-MALT_Num_8_FullRes.tif AutoMask_STD-MALT_Num_8.tif
 
 if [ -f Z_Num9_DeZoom1_STD-MALT_Tile_0_0.tif ]; then
 	mosaic_micmac_tiles.py -filename 'Z_Num9_DeZoom1_STD-MALT' 
@@ -222,7 +222,7 @@ mv Z_Num9_DeZoom1_STD-MALT.tif Z_Num9_DeZoom1_STD-MALT_FullRes.tif
 mv Z_Num9_DeZoom1_STD-MALT.tfw Z_Num9_DeZoom1_STD-MALT_FullRes.tfw
 mv Z_Num9_DeZoom1_STD-MALT.xml Z_Num9_DeZoom1_STD-MALT_FullRes.xml
 
-gdal_translate -tr $RESTERR $RESTERR -r cubicspline -a_srs $proj -co TFW=YES Z_Num9_DeZoom1_STD-MALT_FullRes.tif Z_Num9_DeZoom1_STD-MALT.tif
+gdal_translate -tr $RESTERR $RESTERR -r cubicspline -a_srs "$proj" -co TFW=YES Z_Num9_DeZoom1_STD-MALT_FullRes.tif Z_Num9_DeZoom1_STD-MALT.tif
 cd ..
 
 if [ "$do_angle" = true ]; then
@@ -233,7 +233,7 @@ if [ "$do_angle" = true ]; then
 	fi
 	cp MEC-Malt/Z_Num9_DeZoom1_STD-MALT.tfw TrackAngleMap_nonGT.tfw
 	mv TrackAngleMap.tif TrackAngleMap_nonGT.tif
-	gdal_translate -a_srs $proj -a_nodata 0 TrackAngleMap_nonGT.tif TrackAngleMap_3N.tif
+	gdal_translate -a_srs "$proj" -a_nodata 0 TrackAngleMap_nonGT.tif TrackAngleMap_3N.tif
 	rm TrackAngleMap_nonGT*
 	mm3d SateLib ASTERProjAngle MEC-Malt/Z_Num9_DeZoom1_STD-MALT MEC-Malt/AutoMask_STD-MALT_Num_8.tif $name$B
 	if [ -f TrackAngleMap_3B_Tile_0_0.tif ]; then
@@ -241,7 +241,7 @@ if [ "$do_angle" = true ]; then
 	fi
 	cp MEC-Malt/Z_Num9_DeZoom1_STD-MALT.tfw TrackAngleMap_nonGT.tfw
 	mv TrackAngleMap.tif TrackAngleMap_nonGT.tif
-	gdal_translate -a_srs $proj -a_nodata 0 TrackAngleMap_nonGT.tif TrackAngleMap_3B.tif
+	gdal_translate -a_srs "$proj" -a_nodata 0 TrackAngleMap_nonGT.tif TrackAngleMap_3B.tif
 	rm TrackAngleMap_nonGT*
 fi
 
@@ -255,5 +255,5 @@ if [ -f Orthophotomosaic_Tile_0_0.tif ]; then
 fi
 mv Orthophotomosaic.tif Orthophotomosaic_FullRes.tif
 mv Orthophotomosaic.tfw Orthophotomosaic_FullRes.tfw
-gdal_translate -tr 15 15 -r bilinear -a_srs $proj Orthophotomosaic_FullRes.tif Orthophotomosaic.tif
+gdal_translate -tr 15 15 -r bilinear -a_srs "$proj" Orthophotomosaic_FullRes.tif Orthophotomosaic.tif
 cd ..
