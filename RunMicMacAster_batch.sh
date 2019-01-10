@@ -18,14 +18,14 @@ fitVersion=1
 
 # figure out what options we were passed: 
 #":hz:wnc:f:t:pr" 
-while getopts "z:c:q:w:nf:t:yai:prh" opt; do
+while getopts "z:o:c:q:w:nf:t:yai:prh" opt; do
   case $opt in
     h)
       echo "Run the MicMac-based ASTER DEM pipeline from start to finish."
       echo "Call from the the directory where your zip and .met files are."
       echo "usage: RunMicMacAster_batch.sh -z 'UTMZONE' -f ZOOMF -t RESTERR -wrph"
       echo "    -z UTMZONE      : Use UTM Zone of area of interest. Takes form 'NN +north(south)'"
-      echo "    -p PolarStereo  : Use polar stereo (option N for north EPSG:3411 or S for south EPSG:3412)"
+      echo "    -o PolarStereo  : Use polar stereo (option N for north EPSG:3411 or S for south EPSG:3412)"
       echo "    -c CorThr       : Correlation Threshold for estimates of Z min and max (optional, default : 0.7)"
       echo "    -q SzW          : Size of the correlation window in the last step (optional, default : 2, mean 5*5)"
       echo "    -w              : Name of shapefile to skip masked areas (usually water, this is optional, default : false)."
@@ -46,7 +46,7 @@ while getopts "z:c:q:w:nf:t:yai:prh" opt; do
       utm_set=1
       proj_set=1
       ;;
-    p)
+    o)
       PolarZone=$OPTARG
       polar_set=1
       proj_set=1
@@ -154,7 +154,7 @@ if [ $run_again -eq 1 ]; then
 			echo "WorkFlowASTER_onescene.sh -c " $CorThr " -q " $SzW " -s " $f1 " -z \""$UTMZone"\" -w " $nameWaterMask " -f " $ZoomF " -t " $RESTERR " -n " $NoCorDEM  " -y " $do_ply " -a " $do_angle " -i " $fitVersion >> ProcessAll.sh
 		fi
 		if [ $polar_set -eq 1 ]; then
-			echo "WorkFlowASTER_onescene.sh -c " $CorThr " -q " $SzW " -s " $f1 " -p \""$PolarZone"\" -w " $nameWaterMask " -f " $ZoomF " -t " $RESTERR " -n " $NoCorDEM  " -y " $do_ply " -a " $do_angle " -i " $fitVersion >> ProcessAll.sh
+			echo "WorkFlowASTER_onescene.sh -c " $CorThr " -q " $SzW " -s " $f1 " -o \""$PolarZone"\" -w " $nameWaterMask " -f " $ZoomF " -t " $RESTERR " -n " $NoCorDEM  " -y " $do_ply " -a " $do_angle " -i " $fitVersion >> ProcessAll.sh
 		fi
 	    echo "duration=\$(( SECONDS - start ))" >> ProcessAll.sh
 	    echo "echo Procesing of " $f1 " took \" \$duration \" s to process >> Timings.txt" >> ProcessAll.sh

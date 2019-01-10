@@ -27,14 +27,14 @@ fitVersion=1
 
 
 
-while getopts "s:z:p:c:q:w:n:f:t:y:a:i:h" opt; do
+while getopts "s:z:o:c:q:w:n:f:t:y:a:i:h" opt; do
   case $opt in
     h)
       echo "Run the second step in the MMASTER processing chain."
       echo "usage: WorkFlowASTER_onescene.sh -s SCENENAME -z 'UTMZONE' -f ZOOMF -t RESTERR -w false -h"
       echo "    -s SCENENAME    : Aster scenename/folder where data is located."
       echo "    -z UTMZONE      : Use UTM Zone of area of interest. Takes form 'NN +north(south)'"
-      echo "    -p PolarStereo  : Use polar stereo (option N for north EPSG:3411 or S for south EPSG:3412)"
+      echo "    -o PolarStereo  : Use polar stereo (option N for north EPSG:3411 or S for south EPSG:3412)"
       echo "    -c CorThr       : Correlation Threshold for estimates of Z min and max (optional, default : 0.7)"
       echo "    -q SzW          : Size of the correlation window in the last step (optional, default : 4, mean 9*9)"
       echo "    -w mask         : Name of shapefile to skip masked areas (usually water, this is optional, default : none)."
@@ -69,7 +69,7 @@ while getopts "s:z:p:c:q:w:n:f:t:y:a:i:h" opt; do
       proj_set=1
 	  echo "Projection set to $proj"
       ;;  
-    p)
+    o)
 	  if [ "$OPTARG" = N ]; then
 		proj="+proj=stere +lat_0=90 +lat_ts=70 +lon_0=-45 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
 	  fi
