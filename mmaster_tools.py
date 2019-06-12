@@ -133,18 +133,19 @@ def reproject_geometry(src_data, src_epsg, dst_epsg):
     ----------
     src_data : geometry object
         shapely geometry object to be reprojected.
-    src_epsg : int or str
-        EPSG code for source CRS
-    dst_epsg : int or str
-        EPSG code for destination CRS
+    src_epsg : str
+        Proj4 string of source CRS
+    dst_epsg : str
+        Proj4 string of destination CRS
         
     Returns
     -------
     dst_data : geometry object
         reprojected shapely geometry object.    
     """
-    src_proj = pyproj.Proj(init='epsg:{}'.format(src_epsg))
-    dst_proj = pyproj.Proj(init='epsg:{}'.format(dst_epsg))
+    
+    src_proj = pyproj.Proj(src_epsg)
+    dst_proj = pyproj.Proj(dst_epsg)
     project = partial(pyproj.transform, src_proj, dst_proj)
     return transform(project, src_data)
 
@@ -166,7 +167,7 @@ def nmad(data):
     return np.nanmedian(np.abs(data) - np.nanmedian(data))
 
 
-def get_aster_footprint(gran_name, epsg='4326', indir=None, polyout=True):
+def get_aster_footprint(gran_name, proj4='+units=m +init=epsg:4326', indir=None, polyout=True):
     """
     Create shapefile of ASTER footprint from .met file.
     
@@ -174,8 +175,13 @@ def get_aster_footprint(gran_name, epsg='4326', indir=None, polyout=True):
     ----------
     gran_name : str
         ASTER granule name to use; assumed to also be the folder in which .met file(s) are stored.
-    epsg : str or int
-        EPSG code for coordinate system to use.
+    proj4 : str or int, optional
+        Proj4 representation for coordinate system to use [default: '+units=m +init=epsg:4326', WGS84 Lat/Lon].
+    indir : str, optional
+        Directory to search in [default: current working directory].
+    polyout : bool, optional
+        Create a shapefile of the footprint in the input directory [True].
+
     Returns
     -------
     footprint : Polygon
@@ -190,7 +196,7 @@ def get_aster_footprint(gran_name, epsg='4326', indir=None, polyout=True):
 
     if polyout:
         schema = {'properties': [('id', 'int')], 'geometry': 'Polygon'}
-        outshape = fiona.open(gran_name + '_Footprint.shp', 'w', crs=fiona.crs.from_epsg(int(epsg)),
+        outshape = fiona.open(gran_name + '_Footprint.shp', 'w', crs=proj4,
                               driver='ESRI Shapefile', schema=schema)
 
     footprints = []
@@ -217,7 +223,7 @@ def get_aster_footprint(gran_name, epsg='4326', indir=None, polyout=True):
 
     footprint = cascaded_union(footprints)
     footprint = footprint.simplify(0.0001)
-    outprint = reproject_geometry(footprint, 4326, epsg)
+    outprint = reproject_geometry(footprint, {'init': 'epsg:4326'}, proj4)
     if polyout:
         outshape.write({'properties': {'id': 1}, 'geometry': mapping(outprint)})
         outshape.close()
@@ -1317,7 +1323,7 @@ def mmaster_bias_removal(mst_dem, slv_dem, glacmask=None, landmask=None,
 
     ### Create the stable terrain masks
     stable_mask = create_stable_mask(slv_coreg, glacmask, landmask)
-    fmaskpoly = get_aster_footprint(slv_dem.rsplit('_Z.tif')[0], epsg=slv_coreg.epsg)
+    fmaskpoly = get_aster_footprint(slv_dem.rsplit('_Z.tif')[0], proj4='+units=m +init=epsg:{}'.format(slv_coreg.epsg))
     fmask = make_mask(fmaskpoly, slv_coreg, raster_out=True)
 
     ### PREPARE numpy masked arrays for .img data
@@ -1434,6 +1440,20 @@ def mmaster_bias_removal(mst_dem, slv_dem, glacmask=None, landmask=None,
     mst_coreg, slv_adj_coreg, shift_params2 = dem_coregistration(mst_dem, slv_coreg_xcorr_acorr,
                                                                  glaciermask=glacmask, landmask=landmask,
                                                                  outdir=recoreg_outdir, pts=pts)
+    if shift_params2 == -1:
+        print("Too few points for final co-registration. Exiting.")
+        clean_coreg_dir(out_dir, 're-coreg')
+        if write_log:
+            sys.stdout = sys.__stdout__
+            sys.stderr = sys.__stderr__
+            logfile.close()
+            errfile.close()
+        os.chdir(orig_dir)
+        if return_geoimg:
+            return slv_coreg, mst_coreg
+        else:
+            return     
+    
     clean_coreg_dir(out_dir, 're-coreg')
     orig_slv.shift(shift_params2[0], shift_params2[1])
     orig_slv.img = orig_slv.img + shift_params2[2]

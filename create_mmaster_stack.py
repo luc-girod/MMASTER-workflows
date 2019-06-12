@@ -108,7 +108,7 @@ def create_nc(first_img, args):
     nco.createDimension('x', ncols)
     nco.createDimension('y', nrows)
     nco.createDimension('time', None)
-    nco.Conventions='CF-1.5'
+    nco.Conventions='CF-1.7'
     nco.description = "Stack of co-registered DEMs produced using MMASTER (+ other sources). \n" +\
                       "MMASTER scripts and documentation: https://github.com/luc-girod/MMASTER-workflows \n" +\
                       "pybob source and documentation: https://github.com/iamdonovan/pybob"
@@ -183,7 +183,7 @@ def main():
     #first_img.info()
     
     nco, to, xo, yo = create_nc(first_img, args)
-    crso = create_crs_variable(first_img.epsg, nco)
+    create_crs_variable(first_img.epsg, nco)
     # crso.GeoTransform = ' '.join([str(i) for i in first_img.gd.GetGeoTransform()])
     
     #maxchar = max([len(f.rsplit('.tif', 1)[0]) for f in args.filelist])
