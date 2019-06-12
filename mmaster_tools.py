@@ -2,6 +2,12 @@
 #from future_builtins import zip
 from functools import partial
 import os
+os.environ["OMP_NUM_THREADS"] = "12"
+os.environ["OPENBLAS_NUM_THREADS"] = "12"
+os.environ["MKL_NUM_THREADS"] = "12"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "12"
+os.environ["NUMEXPR_NUM_THREADS"] = "12"
+
 import sys
 from glob import glob
 import errno
@@ -467,12 +473,12 @@ def get_xy_rot(mst_dem, myang):
     xxr = xxr - np.nanmin(xxr)
     yyr = yyr - np.nanmin(yyr)
 
-    plt.figure(figsize=(5, 5))
-    plt.imshow(xxr, interpolation='nearest')
+    #plt.figure(figsize=(5, 5))
+    #plt.imshow(xxr, interpolation='nearest')
     # plt.show()
 
-    plt.figure(figsize=(5, 5))
-    plt.imshow(yyr, interpolation='nearest')
+    #plt.figure(figsize=(5, 5))
+    #plt.imshow(yyr, interpolation='nearest')
     # plt.show()
 
     return xxr, yyr
@@ -509,12 +515,12 @@ def get_atrack_coord(mst_dem, myangN, myangB):
 
     yyn = yyn - np.nanmin(yyn)
     yyb = yyb - np.nanmin(yyb)
-    plt.figure(figsize=(5, 5))
-    plt.imshow(yyn, interpolation='nearest')
+    #plt.figure(figsize=(5, 5))
+    #plt.imshow(yyn, interpolation='nearest')
     # plt.show()
 
-    plt.figure(figsize=(5, 5))
-    plt.imshow(yyb, interpolation='nearest')
+    #plt.figure(figsize=(5, 5))
+    #plt.imshow(yyb, interpolation='nearest')
     # plt.show()
 
     return yyn, yyb
@@ -854,7 +860,7 @@ def final_histogram(dH0, dH1, dH2, dHfinal, pp):
 
     plt.xlabel('Elevation difference [meters]')
     plt.ylabel('Number of samples')
-    plt.xlim(-50, 50)
+    plt.xlim(-20, 20)
 
     # numwidth = max([len('{:.1f} m'.format(xadj)), len('{:.1f} m'.format(yadj)), len('{:.1f} m'.format(zadj))])
     plt.text(0.05, 0.90, 'Mean: ' + ('{:.1f} m'.format(stats0[0])),
@@ -919,7 +925,6 @@ def correct_cross_track_bias(mst_dem, slv_dem, inang, pp, pts=False):
     # Correct DEM
     zupdate = np.ma.array(slv_dem.img + out_corr, mask=slv_dem.img.mask)  # shift in z
     slv_dem = slv_dem.copy(new_raster=zupdate)
-
     return slv_dem, out_corr, pcoef
 
 
@@ -960,186 +965,283 @@ def get_filtered_along_track(mst_dem, slv_dem, ang_maps, pts):
     return grp_xx, grp_dH, xxn, xxb, yy, xxn_mat, xxb_mat
 
 
-def correct_along_track_bias(mst_dem, slv_dem, ang_mapN, ang_mapB, pp, pts):
+def correct_along_track_bias(mst_dem, slv_dem, ang_mapN, ang_mapB, pp, pts, robust=True):
+    
     # calculate along/across track coordinates
     # myang = np.deg2rad(np.multiply(inang,np.multiply(dH,0)+1))# generate synthetic angle image for testing
-    grp_xx, grp_dH, xxn, xxb, yy, xxn_mat, xxb_mat = get_filtered_along_track(mst_dem, slv_dem, 
-                                                                              (ang_mapN, ang_mapB), pts)
-    # sampsize = np.int(np.floor(xx.size*0.25)) # for use as a percentage
-    sampsize = min(int(0.15 * xxn.size), 15000)
-    if xxn.size > sampsize:
-        mysamp = np.random.randint(0, xxn.size, sampsize)
-    else:
-        mysamp = np.arange(0, xxn.size)
+    grp_xx, grp_dH, xxn, xxb, yy, xxn_mat, xxb_mat = get_filtered_along_track(mst_dem, slv_dem, (ang_mapN, ang_mapB), pts)
     
+    def get_sample(xxn,n=15000):
+       # sampsize = np.int(np.floor(xx.size*0.25)) # for use as a percentage
+        sampsize = min(int(0.15 * xxn.size), n)
+        if xxn.size > sampsize:
+            mysamp = np.random.randint(0, xxn.size, sampsize)
+        else:
+            mysamp = np.arange(0, xxn.size)
+        return mysamp
+    mysamp = get_sample(xxn) # redundancy - can be removed once checked
     #fig = plt.figure(figsize=(7, 5), dpi=200)
     # fig.suptitle(title, fontsize = 14)
     #plt.plot(xxn[mysamp], yy[mysamp], '^', ms=0.5, color='0.5', rasterized=True, fillstyle='full')
 
     # Define the bounds of the three sine wave coefficients to solve
     order = 2
-    lb1 = [0, 55, -np.pi] # long-wave amplitude, frequency, phase
+    lb1 = [0, 50, -np.pi] # long-wave amplitude, frequency, phase
     ub1 = [20, 140, np.pi] # 
     lb2 = [0, 20, -np.pi] # mid-range
-    ub2 = [15, 40, np.pi]
+    ub2 = [10, 40, np.pi]
     lb3 = [0, 2, 0] # jitter
     ub3 = [3, 10, 2 * np.pi]
     
-    # Concatenate the bounds variables, This will determine the number of parameters
-    # in the sum of sines equation, through the length of the p0, the initial estimate
-    #lbb = np.concatenate((np.tile(lb1, 2 * order), np.tile(lb2, 2 * order), np.tile(lb3, 2 * order)))
-    lbb = np.concatenate((np.tile(lb1, 2 * order), np.tile(lb2, 2 * order)))
-    # ubb = np.concatenate((np.tile(ub1, 2 * order), np.tile(ub2, 2 * order), np.tile(ub3, 2 * order)))
-    ubb = np.concatenate((np.tile(ub1, 2 * order), np.tile(ub2, 2 * order)))
-    p0 = np.divide(lbb + ubb, 2)
+    # RUN THE FIT ALL TOGETHER IF GOOD SAMPLING AND DATA AVAILABLE. IF SPATIAL SAMPLING IS LIMITED, THEN 
+    # IT IS BEST TO RUN THE ROBUST OPTION WHICH SOLVES FIRST THE LOW FREQUENCY AND THEN THE JITTER... 
+    if not robust:
+        
+        lbb = np.concatenate((np.tile(lb1, 2 * order), np.tile(lb2, 2 * order), np.tile(lb3, 2 * order)))
+        ubb = np.concatenate((np.tile(ub1, 2 * order), np.tile(ub2, 2 * order), np.tile(ub3, 2 * order)))
+        p0 = np.divide(lbb + ubb, 2)  # INITAL ESTIMATE
+        #print(p0.size)
+        # use the grouped statistics to get an initial estimate for the sum of sines fit
+        # NOTE: only using one angle, needs two angles to be correct
+        print("Fitting smoothed data to find initial parameters.")
+        tt0 = time.time()
+        init_args = dict(args=(grp_xx, grp_dH), method="L-BFGS-B", 
+                         bounds=optimize.Bounds(lbb, ubb), options={"ftol": 1E-4,"xtol": 1E-4})
+        init_results = optimize.basinhopping(costfun_sumofsin, p0, disp=True,
+                                             T=70, 
+                                             minimizer_kwargs=init_args)
+        init_results = init_results.lowest_optimization_result
+        print(init_results.x)
+        # use the initial estimate to start, USING two angles to get the lowest 2
+        # frequencies for the sum of sines fit
+        
+        lbb = np.concatenate((np.tile(lb1, 2 * order), np.tile(lb2, 2 * order), np.tile(lb3, 2 * order)))
+        ubb = np.concatenate((np.tile(ub1, 2 * order), np.tile(ub2, 2 * order), np.tile(ub3, 2 * order)))
 
-    # use the grouped statistics to get an initial estimate for the sum of sines fit
-    # NOTE: only using one angle, needs two angles to be correct
-    print("Fitting smoothed data to find initial parameters.")
-    tt0 = time.time()
-    init_args = dict(args=(grp_xx, grp_dH), method="L-BFGS-B", 
-                     bounds=optimize.Bounds(lbb, ubb), options={"ftol": 1E-4})
-    init_results = optimize.basinhopping(costfun_sumofsin, p0, disp=True,
-                                         T=200, 
-                                         minimizer_kwargs=init_args)
-    init_results = init_results.lowest_optimization_result
-    #init_results = optimize.least_squares(costfun_sumofsin, p0, args=(grp_xx, grp_dH),
-    #                                      method='dogbox', bounds=([lbb, ubb]), loss='linear',
-    #                                      f_scale=5, ftol=1E-8, xtol=1E-8)
-    # init_results = optimize.least_squares(costfun_sumofsin, p0, args=(grp_xx, grp_dH),
-    #                                            method='trf', bounds=([lbb, ubb]), loss='soft_l1',
-    #                                            f_scale=0.8, ftol=1E-6, xtol=1E-6)
+#        j2=np.reshape(init_results.x,(3,int(init_results.x.size/3)))
+#        j3=np.hstack((j2,j2))
+#        j4 = j3.reshape((j3.size,))
+#        p1 = j4 # Duplicate initial estimate for both angles
+#        print(lbb.size)
+#        print(p1.size)
+        p1 = init_results.x
 
-    #    myresults0 = optimize.minimize(fitfun_sumofsin_2angle2, p0, args=(xxn[mysamp], xxb[mysamp], yy[mysamp]),
-    #                                  bounds=optimize.Bounds(lbb,ubb), method='L-BFGS-B',
-    #                                  options={'maxiter': 1000,'maxfun':1000, 'ftol':1E-8})
+        mysamp = get_sample(xxn,n=20000)
+        
+        tt1 = time.time()
+        print("Initial paramaters found in : ", (tt1-tt0), " seconds")
+        print("Sum of Sines Fitting using ", mysamp.size, "samples")
+        minimizer_kwargs = dict(args=(xxn[mysamp], yy[mysamp], xxb[mysamp]),
+                                method="L-BFGS-B",
+                                bounds=optimize.Bounds(lbb, ubb),
+                                options={"ftol": 1E-3,"xtol": 1E-2})
+        myresults = optimize.basinhopping(costfun_sumofsin, p1 , disp=True,
+                                          T=700, #niter_success=40,
+                                          minimizer_kwargs=minimizer_kwargs)
+        myresults = myresults.lowest_optimization_result
+        tt2 = time.time()
+        print("Sum of Sinses fitting finished in : ", (tt2-tt1), " seconds")
+
+        xxn2 = np.linspace(np.min(xxn), np.max(xxn), 1000)
+        xxb2 = np.linspace(np.min(xxb), np.max(xxb), 1000)
+        #mypred0 = fitfun_sumofsin(xxn2, init_results.x)
+        mypred = fitfun_sumofsin_2angle(xxn2, xxb2, myresults.x)
+        sinmod = fitfun_sumofsin_2angle(xxn_mat, xxb_mat, myresults.x)
+        
+        ## GET ONLY LOWER FREQUENCY RESULTS [REMNANT FROM ORIGINAL APPROACH TO SOLVE ALL FREQUENCIES AT ONCE]
+        acoeff = myresults.x[:24]
+        mypred2 = fitfun_sumofsin_2angle(xxn2, xxb2, acoeff)
+        sinmod2 = fitfun_sumofsin_2angle(xxn_mat, xxb_mat, acoeff)
     
-    # use the initial estimate to start, USING two angles to get the lowest 2
-    # frequencies for the sum of sines fit
-    tt1 = time.time()
-    print("Initial paramaters found in : ", (tt1-tt0), " seconds")
-    print("Sum of Sines Fitting using ", mysamp.size, "samples")
-    minimizer_kwargs = dict(args=(xxn[mysamp], yy[mysamp], xxb[mysamp]),
-                            method="L-BFGS-B",
-                            bounds=optimize.Bounds(lbb, ubb),
-                            options={"ftol": 1E-4})
-    myresults = optimize.basinhopping(costfun_sumofsin, init_results.x, disp=True,
-                                      T=1000, niter_success=40,
-                                      minimizer_kwargs=minimizer_kwargs)
-    myresults = myresults.lowest_optimization_result
-    tt2 = time.time()
-    print("Sum of Sinses fitting finished in : ", (tt2-tt1), " seconds")
-
-    xxn2 = np.linspace(np.min(xxn), np.max(xxn), 1000)
-    xxb2 = np.linspace(np.min(xxb), np.max(xxb), 1000)
-    #mypred0 = fitfun_sumofsin(xxn2, init_results.x)
-    mypred = fitfun_sumofsin_2angle(xxn2, xxb2, myresults.x)
-    #init_fig = plt.figure(figsize=(7, 5), dpi=200)    
-    #plt.plot(xxn[mysamp], yy[mysamp], '^', ms=0.5, color='0.5', rasterized=True, fillstyle='full', label='initial data')
-    #plt.plot(grp_xx, grp_dH, 'k', label='grouped medians')
-    #plt.plot(xxn2, mypred0, '-', ms=2, color='k', label='initial')
-    #plt.plot(xxn2, mypred, '-', ms=2, color='r', label='final')
-    #plt.legend()
-    #pp.savefig(init_fig, dpi=200)
+        plot_bias(xxn, yy, grp_xx, grp_dH, 'Along', pp, pmod=(xxn2, mypred2), smod=(xxn2, mypred))
+         
+        out_corr = np.reshape(sinmod, slv_dem.img.shape)
+        out_corr2 = np.reshape(sinmod2, slv_dem.img.shape)
+        jitter_corr = out_corr - out_corr2 # have to extract only the jitter component, even though we solved it all in one step. 
+        
+        zupdate = np.ma.array(slv_dem.img + out_corr2, mask=slv_dem.img.mask)
+        slv_dem_low = slv_dem.copy(new_raster=zupdate)
+        
+        zupdate2 = np.ma.array(slv_dem_low.img + jitter_corr, mask=slv_dem_low.img.mask)  # low frequencies
+        slv_dem2 = slv_dem.copy(new_raster=zupdate2)
     
-    ### GET ONLY LOWER FREQUENCY RESULTS [REMNANT FROM ORIGINAL APPROACH TO SOLVE ALL FREQUENCIES AT ONCE]
-    #acoeff = myresults.x[:-18]
-    #mypred2 = fitfun_sumofsin_2angle(xxn2, xxb2, acoeff)
-    #sinmod2 = fitfun_sumofsin_2angle(xxn_mat, xxb_mat, acoeff)
-
-    # plot_bias(orig_data,grp_data,mytype,pp)
-    #plot_bias(xxn, yy, grp_xx, grp_dH, 'Along', pp, pmod=(xxn2, mypred2), smod=(xxn2, mypred))
-    plot_bias(xxn, yy, grp_xx, grp_dH, 'Along', pp, smod=(xxn2, mypred))
-
-    #out_corr2 = np.reshape(sinmod2, slv_dem.img.shape)
-    # apply the low-frequency correction
-    sinmod = fitfun_sumofsin_2angle(xxn_mat, xxb_mat, myresults.x)
-    out_corr = np.reshape(sinmod, slv_dem.img.shape)
-
-    zupdate = np.ma.array(slv_dem.img + out_corr, mask=slv_dem.img.mask)
-    slv_dem_low = slv_dem.copy(new_raster=zupdate)
-
-    fig2 = plt.figure(figsize=(7, 5), dpi=200)
-    ax = fig2.gca()
-    # fig.suptitle(title, fontsize = 14)
-    plt1 = plt.imshow(out_corr)
-    plt1.set_clim(np.nanmin(out_corr), np.nanmax(out_corr))
-    divider = make_axes_locatable(ax)
-    cax = divider.append_axes("right", size="5%", pad=0.05)
-    plt.colorbar(plt1, cax=cax)
-    ax.set_title('Along-track Correction', fontsize=14)
-    ax.set_xlabel('column', fontsize=14)
-    ax.set_xlabel('row', fontsize=14)
-    plt.tight_layout()
-    pp.savefig(fig2, dpi=200)
-
-    # now, estimate the jitter correction using the corrected slave dem
-    grp_xx, grp_dH, xxn, xxb, yy, xxn_mat, xxb_mat = get_filtered_along_track(mst_dem, slv_dem_low, 
-                                                                              (ang_mapN, ang_mapB), pts)
-    sampsize = min(int(0.15 * xxn.size), 50000)
-    if xxn.size > sampsize:
-        mysamp = np.random.randint(0, xxn.size, sampsize)
+    
+        fig2 = plt.figure(figsize=(7, 5), dpi=200)
+        ax = fig2.gca()
+        # fig.suptitle(title, fontsize = 14)
+        plt1 = plt.imshow(out_corr)
+        plt1.set_clim(np.nanmin(out_corr), np.nanmax(out_corr))
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(plt1, cax=cax)
+        ax.set_title('Along-track Correction', fontsize=14)
+        ax.set_xlabel('column', fontsize=14)
+        ax.set_xlabel('row', fontsize=14)
+        plt.tight_layout()
+        pp.savefig(fig2, dpi=200)    
+    
+    
+        return (slv_dem_low, out_corr2, acoeff), (slv_dem2, jitter_corr, myresults.x)
+    
     else:
-        mysamp = np.arange(0, xxn.size)
+        # get a random sample according to sample size
+        mysamp = get_sample(xxn,n=20000)
 
-    lb2 = [0, 20, 0] # mid-range
-    ub2 = [5, 40, 2*np.pi]
-    lb3 = [0, 3, 0] # jitter
-    ub3 = [3, 10, 2 * np.pi]
-    lbb = np.concatenate((np.tile(lb2, 2 * order), np.tile(lb3, 2 * order)))
-    ubb = np.concatenate((np.tile(ub2, 2 * order), np.tile(ub3, 2 * order)))
-
-    p0 = np.divide(lbb + ubb, 2)
+        # Concatenate the bounds variables, This will determine the number of parameters
+        # in the sum of sines equation, through the length of the p0, the initial estimate
+        #lbb = np.concatenate((np.tile(lb1, 2 * order), np.tile(lb2, 2 * order), np.tile(lb3, 2 * order)))
+        lbb = np.concatenate((np.tile(lb1, 2 * order), np.tile(lb2, 2 * order)))
+        # ubb = np.concatenate((np.tile(ub1, 2 * order), np.tile(ub2, 2 * order), np.tile(ub3, 2 * order)))
+        ubb = np.concatenate((np.tile(ub1, 2 * order), np.tile(ub2, 2 * order)))
+        p0 = np.divide(lbb + ubb, 2)
     
-    if xxn.size < 10000:
-        Tparam = 50
-        myscale = 0.5
-    else:
-        Tparam = 500
-        myscale = 0.1
+        # use the grouped statistics to get an initial estimate for the sum of sines fit
+        # NOTE: only using one angle, needs two angles to be correct
+        print("Fitting smoothed data to find initial parameters.")
+        tt0 = time.time()
+        init_args = dict(args=(grp_xx, grp_dH), method="L-BFGS-B", 
+                         bounds=optimize.Bounds(lbb, ubb), options={"ftol": 1E-4})
+        init_results = optimize.basinhopping(costfun_sumofsin, p0, disp=True,
+                                             T=200, 
+                                             minimizer_kwargs=init_args)
+        init_results = init_results.lowest_optimization_result
+        #init_results = optimize.least_squares(costfun_sumofsin, p0, args=(grp_xx, grp_dH),
+        #                                      method='dogbox', bounds=([lbb, ubb]), loss='linear',
+        #                                      f_scale=5, ftol=1E-8, xtol=1E-8)
+        # init_results = optimize.least_squares(costfun_sumofsin, p0, args=(grp_xx, grp_dH),
+        #                                            method='trf', bounds=([lbb, ubb]), loss='soft_l1',
+        #                                            f_scale=0.8, ftol=1E-6, xtol=1E-6)
     
-    tt0 = time.time()
-    minimizer_kwargs = dict(args=(xxn[mysamp], yy[mysamp], xxb[mysamp], myscale),
-                            method="L-BFGS-B",
-                            bounds=optimize.Bounds(lbb, ubb),
-                            options={"ftol": 1E-4})
-    jitter_res = optimize.basinhopping(costfun_sumofsin, p0, disp=True,
-                                      T=Tparam, minimizer_kwargs=minimizer_kwargs)
-    jitter_res = jitter_res.lowest_optimization_result
-    tt1 = time.time()
-    print("Sum of sines finished in : ", (tt1-tt0), " seconds")
+        #    myresults0 = optimize.minimize(fitfun_sumofsin_2angle2, p0, args=(xxn[mysamp], xxb[mysamp], yy[mysamp]),
+        #                                  bounds=optimize.Bounds(lbb,ubb), method='L-BFGS-B',
+        #                                  options={'maxiter': 1000,'maxfun':1000, 'ftol':1E-8})
+        
+        # use the initial estimate to start, USING two angles to get the lowest 2
+        # frequencies for the sum of sines fit
+        tt1 = time.time()
+        print("Initial paramaters found in : ", (tt1-tt0), " seconds")
+        print("Sum of Sines Fitting using ", mysamp.size, "samples")
+        minimizer_kwargs = dict(args=(xxn[mysamp], yy[mysamp], xxb[mysamp]),
+                                method="L-BFGS-B",
+                                bounds=optimize.Bounds(lbb, ubb),
+                                options={"ftol": 1E-4})
+        myresults = optimize.basinhopping(costfun_sumofsin, init_results.x, disp=True,
+                                          T=1000, niter_success=40,
+                                          minimizer_kwargs=minimizer_kwargs)
+        myresults = myresults.lowest_optimization_result
+        tt2 = time.time()
+        print("Sum of Sinses fitting finished in : ", (tt2-tt1), " seconds")
+    
+        xxn2 = np.linspace(np.min(xxn), np.max(xxn), 1000)
+        xxb2 = np.linspace(np.min(xxb), np.max(xxb), 1000)
+        #mypred0 = fitfun_sumofsin(xxn2, init_results.x)
+        mypred = fitfun_sumofsin_2angle(xxn2, xxb2, myresults.x)
+        #init_fig = plt.figure(figsize=(7, 5), dpi=200)    
+        #plt.plot(xxn[mysamp], yy[mysamp], '^', ms=0.5, color='0.5', rasterized=True, fillstyle='full', label='initial data')
+        #plt.plot(grp_xx, grp_dH, 'k', label='grouped medians')
+        #plt.plot(xxn2, mypred0, '-', ms=2, color='k', label='initial')
+        #plt.plot(xxn2, mypred, '-', ms=2, color='r', label='final')
+        #plt.legend()
+        #pp.savefig(init_fig, dpi=200)
+        
+        ### GET ONLY LOWER FREQUENCY RESULTS [REMNANT FROM ORIGINAL APPROACH TO SOLVE ALL FREQUENCIES AT ONCE]
+        #acoeff = myresults.x[:-18]
+        #mypred2 = fitfun_sumofsin_2angle(xxn2, xxb2, acoeff)
+        #sinmod2 = fitfun_sumofsin_2angle(xxn_mat, xxb_mat, acoeff)
+    
+        # plot_bias(orig_data,grp_data,mytype,pp)
+        #plot_bias(xxn, yy, grp_xx, grp_dH, 'Along', pp, pmod=(xxn2, mypred2), smod=(xxn2, mypred))
+        plot_bias(xxn, yy, grp_xx, grp_dH, 'Along', pp, smod=(xxn2, mypred))
+    
+        #out_corr2 = np.reshape(sinmod2, slv_dem.img.shape)
+        # apply the low-frequency correction
+        sinmod = fitfun_sumofsin_2angle(xxn_mat, xxb_mat, myresults.x)
+        out_corr = np.reshape(sinmod, slv_dem.img.shape)
+    
+        zupdate = np.ma.array(slv_dem.img + out_corr, mask=slv_dem.img.mask)
+        slv_dem_low = slv_dem.copy(new_raster=zupdate)
+    
+        fig2 = plt.figure(figsize=(7, 5), dpi=200)
+        ax = fig2.gca()
+        # fig.suptitle(title, fontsize = 14)
+        plt1 = plt.imshow(out_corr)
+        plt1.set_clim(np.nanmin(out_corr), np.nanmax(out_corr))
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(plt1, cax=cax)
+        ax.set_title('Along-track Correction', fontsize=14)
+        ax.set_xlabel('column', fontsize=14)
+        ax.set_xlabel('row', fontsize=14)
+        plt.tight_layout()
+        pp.savefig(fig2, dpi=200)
+    
+        # now, estimate the jitter correction using the corrected slave dem
+        grp_xx, grp_dH, xxn, xxb, yy, xxn_mat, xxb_mat = get_filtered_along_track(mst_dem, slv_dem_low, 
+                                                                                  (ang_mapN, ang_mapB), pts)
+        sampsize = min(int(0.15 * xxn.size), 50000)
+        if xxn.size > sampsize:
+            mysamp = np.random.randint(0, xxn.size, sampsize)
+        else:
+            mysamp = np.arange(0, xxn.size)
+    
+        lb2 = [0, 20, 0] # mid-range
+        ub2 = [5, 40, 2*np.pi]
+        lb3 = [0, 3, 0] # jitter
+        ub3 = [3, 10, 2 * np.pi]
+        lbb = np.concatenate((np.tile(lb2, 2 * order), np.tile(lb3, 2 * order)))
+        ubb = np.concatenate((np.tile(ub2, 2 * order), np.tile(ub3, 2 * order)))
+    
+        p0 = np.divide(lbb + ubb, 2)
+        
+        if xxn.size < 10000:
+            Tparam = 50
+            myscale = 0.5
+        else:
+            Tparam = 500
+            myscale = 0.1
+        
+        tt0 = time.time()
+        minimizer_kwargs = dict(args=(xxn[mysamp], yy[mysamp], xxb[mysamp], myscale),
+                                method="L-BFGS-B",
+                                bounds=optimize.Bounds(lbb, ubb),
+                                options={"ftol": 1E-4})
+        jitter_res = optimize.basinhopping(costfun_sumofsin, p0, disp=True,
+                                          T=Tparam, minimizer_kwargs=minimizer_kwargs)
+        jitter_res = jitter_res.lowest_optimization_result
+        tt1 = time.time()
+        print("Sum of sines finished in : ", (tt1-tt0), " seconds")
+    
+    #    xxn2 = np.linspace(np.min(xxn), np.max(xxn), 1000)
+        jitt_pred = fitfun_sumofsin_2angle(xxn2, xxb2, jitter_res.x)
+        plot_bias(xxn, yy, grp_xx, grp_dH, 'Jitter', pp, smod=(xxn2, jitt_pred))
+    
+        jitter_mod = fitfun_sumofsin_2angle(xxn_mat, xxb_mat, jitter_res.x)
+        jitter_corr = np.reshape(jitter_mod, slv_dem_low.img.shape)
+        # export slave dem with three constraing along track frequences
+        zupdate2 = np.ma.array(slv_dem_low.img + jitter_corr, mask=slv_dem_low.img.mask)  # low frequencies
+        slv_dem2 = slv_dem.copy(new_raster=zupdate2)
+    
+        fig3 = plt.figure(figsize=(7, 5), dpi=200)
+        ax = fig3.gca()
+        # fig.suptitle(title, fontsize = 14)
+        plt1 = plt.imshow(jitter_corr)
+        plt1.set_clim(np.nanmin(jitter_corr), np.nanmax(jitter_corr))
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(plt1, cax=cax)
+        ax.set_title('Jitter-track Correction', fontsize=14)
+        ax.set_xlabel('column', fontsize=14)
+        ax.set_xlabel('row', fontsize=14)
+        plt.tight_layout()
+        pp.savefig(fig3, dpi=200)
 
-#    xxn2 = np.linspace(np.min(xxn), np.max(xxn), 1000)
-    jitt_pred = fitfun_sumofsin_2angle(xxn2, xxb2, jitter_res.x)
-    plot_bias(xxn, yy, grp_xx, grp_dH, 'Jitter', pp, smod=(xxn2, jitt_pred))
 
-    jitter_mod = fitfun_sumofsin_2angle(xxn_mat, xxb_mat, jitter_res.x)
-    jitter_corr = np.reshape(jitter_mod, slv_dem_low.img.shape)
-    # export slave dem with three constraing along track frequences
-    zupdate2 = np.ma.array(slv_dem_low.img + jitter_corr, mask=slv_dem_low.img.mask)  # low frequencies
-    slv_dem2 = slv_dem.copy(new_raster=zupdate2)
-
-    fig3 = plt.figure(figsize=(7, 5), dpi=200)
-    ax = fig3.gca()
-    # fig.suptitle(title, fontsize = 14)
-    plt1 = plt.imshow(jitter_corr)
-    plt1.set_clim(np.nanmin(jitter_corr), np.nanmax(jitter_corr))
-    divider = make_axes_locatable(ax)
-    cax = divider.append_axes("right", size="5%", pad=0.05)
-    plt.colorbar(plt1, cax=cax)
-    ax.set_title('Jitter-track Correction', fontsize=14)
-    ax.set_xlabel('column', fontsize=14)
-    ax.set_xlabel('row', fontsize=14)
-    plt.tight_layout()
-    pp.savefig(fig3, dpi=200)
-
-
-    return (slv_dem_low, out_corr, myresults.x), (slv_dem2, jitter_corr, jitter_res.x)
+        return (slv_dem_low, out_corr, myresults.x), (slv_dem2, jitter_corr, jitter_res.x)
 
 
 def mmaster_bias_removal(mst_dem, slv_dem, glacmask=None, landmask=None,
                          pts=False, work_dir='.', out_dir='biasrem',
-                         return_geoimg=True, write_log=False):
+                         return_geoimg=True, write_log=False, robust=True):
     """
     Removes cross track and along track biases from MMASTER DEMs. 
 
@@ -1247,7 +1349,7 @@ def mmaster_bias_removal(mst_dem, slv_dem, glacmask=None, landmask=None,
     plt.close("all")
     
     ### along-track bias removal
-    low_freq, all_freq = correct_along_track_bias(mst_coreg, slv_coreg_xcorr, ang_mapN, ang_mapB, pp, pts=pts)
+    low_freq, all_freq = correct_along_track_bias(mst_coreg, slv_coreg_xcorr, ang_mapN, ang_mapB, pp, pts=pts, robust=robust)
     slv_coreg_xcorr_acorr, acorr, scoef = low_freq
     slv_coreg_xcorr_acorr_jcorr, jcorr, jcoef = all_freq
     plt.close("all")
@@ -1268,7 +1370,7 @@ def mmaster_bias_removal(mst_dem, slv_dem, glacmask=None, landmask=None,
         mytitle = 'dH After Cross Track Corrections'
         false_hillshade(dH1, mytitle, pp=pp)
 
-        # Calculate After Cross Track Changes
+        # Calculate After Low Frequency Along Track Corrections
         mytitle = 'dH After Low Frequency Along Track Corrections'
         false_hillshade(dH2, mytitle, pp=pp)
 

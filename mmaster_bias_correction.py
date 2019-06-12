@@ -38,9 +38,13 @@ def main():
                         help="process assuming that master DEM is point elevations [False].")
     parser.add_argument('-l', '--log', action='store_true', default=False,
                         help="write output to a log file rather than printing to the screen [False].")
+    parser.add_argument('-e', '--single_equation', action='store_false', default=True,
+                        help="Switch to control the fitting process, either to solve biases in 1 step \
+                             or to solve jitter in 2 steps [True].")
     args = parser.parse_args()
     
     # figure out if we have one image or many
+    print('Hello')
     print('Number of image directories given: {}'.format(len(args.indir)))
     # only go through the trouble of setting up multiprocessing
     # if we have more than one directory to work on.
@@ -58,7 +62,8 @@ def main():
                     'pts': args.points, 
                     'out_dir': args.outdir,
                     'return_geoimg': False,
-                    'write_log': True}
+                    'write_log': True,
+                    'robust': args.single_equation}
         u_args = [{'work_dir': d, 'slv_dem': '{}_Z.tif'.format(d)} for d in args.indir]
         for d in u_args:
             d.update(arg_dict)
@@ -83,7 +88,8 @@ def main():
                                      out_dir=args.outdir,
                                      pts=args.points,
                                      return_geoimg=False,
-                                     write_log=args.log)
+                                     write_log=args.log,
+                                     robust=args.single_equation)
             else:
                 mmaster_bias_removal(args.masterdem,
                                      args.slavedem,
@@ -92,7 +98,8 @@ def main():
                                      out_dir=args.outdir,
                                      pts=args.points,
                                      return_geoimg=False,
-                                     write_log=args.log)
+                                     write_log=args.log,
+                                     robust=args.single_equation)
             os.chdir(odir)
         
 
