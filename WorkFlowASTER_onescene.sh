@@ -147,7 +147,7 @@ cd ..
 
 mm3d SateLib Aster2Grid $name$Bx 20 "$proj" HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
 mm3d SateLib Aster2Grid $name$Nx 20 "$proj" HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
-mm3d SateLib Aster2Grid "FalseColor_$name.xml" 20 "+proj=utm +zone=$UTM +datum=WGS84 +units=m +no_defs" HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
+mm3d SateLib Aster2Grid "FalseColor_$name.xml" 20 "$proj" HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
 
 mm3d Malt Ortho ".*$name(|_3N|_3B).tif" GRIBin ImMNT="$name(_3N|_3B).tif" MOri=GRID ZMoy=2500 ZInc=2500 ZoomF=8 ZoomI=32 ResolTerrain=30 NbVI=2 EZA=1 Regul=0.1 DefCor=$CorThr DoOrtho=0 DirMEC=MEC-Mini
 
