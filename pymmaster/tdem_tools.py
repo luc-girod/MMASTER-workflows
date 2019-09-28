@@ -7,16 +7,10 @@ import os, sys
 import numpy as np
 from itertools import groupby
 from operator import itemgetter
-import math as m
-import gdal, ogr, osr, gdalconst
-from scipy.interpolate import interp1d
-import pymmaster.fit_tools as ft
+import gdal
 import pymmaster.stack_tools as st
 import pymmaster.other_tools as ot
-import pybob.ddem_tools as dt
 from pybob.coreg_tools import get_slope
-import pandas as pd
-from mblib import vol_hypso_linear
 
 fn_stack = '/media/atom/Data/tmp/N72W078_final.nc'
 fn_shp = '/home/atom/data/inventory_products/RGI/00_rgi60_neighb_merged/04_rgi60_ArcticCanadaSouth/rgi60_region4_ArcticCanadaSouth.shp'
