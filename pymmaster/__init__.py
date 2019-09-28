@@ -6,3 +6,5 @@ pymmaster is a python package to remove jitter-related bias in ASTER DEMs using 
 import pymmaster.mmaster_tools
 import pymmaster.fit_tools
 import pymmaster.stack_tools
+import pymmaster.other_tools
+import pymmaster.tdem_tools

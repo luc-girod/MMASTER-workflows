@@ -1,14 +1,18 @@
 from __future__ import print_function
-import gdal, osr, ogr, gdalconst
-import os, sys
+import gdal
+import osr
+import ogr
+import gdalconst
+import os
+import sys
 import numpy as np
 import pymmaster.fit_tools as ft
 import math as m
 import pandas as pd
 from datetime import datetime
 
-## AST L1A METHODS
 
+# AST L1A METHODS
 def extract_odl_astL1A(fn):
     f = open(fn, 'r')
     body = f.read()
@@ -84,8 +88,8 @@ def extract_odl_astL1A(fn):
 
     return lat_tuple, lon_tuple, caldat, cloudcov_perc, band_tags, orient_angl
 
-def l1astrip_polygon(l1a_subdir):
 
+def l1astrip_polygon(l1a_subdir):
     # number of l1a granules
     strip_l1a = [os.path.join(l1a_subdir, l1a) for l1a in os.listdir(l1a_subdir) if l1a.endswith('.met')]
 
@@ -100,29 +104,29 @@ def l1astrip_polygon(l1a_subdir):
             # if this is happening, ladies and gentlemen, bad news, we definitely have an image on the dateline
 
             # let's do two full polygons from each side of the dateline...
-            lon_rightside = np.array(lon_tup,dtype=float)
-            lon_rightside[lon_rightside<-160] += 360
+            lon_rightside = np.array(lon_tup, dtype=float)
+            lon_rightside[lon_rightside < -160] += 360
 
-            lon_leftside = np.array(lon_tup,dtype=float)
-            lon_leftside[lon_leftside>160] -= 360
+            lon_leftside = np.array(lon_tup, dtype=float)
+            lon_leftside[lon_leftside > 160] -= 360
 
-            rightside_coord = list(zip(list(lon_rightside) + [lon_rightside[0]],lat_tup + [lat_tup[0]]))
+            rightside_coord = list(zip(list(lon_rightside) + [lon_rightside[0]], lat_tup + [lat_tup[0]]))
             rightside_poly = poly_from_coords(rightside_coord)
 
-            leftside_coord = list(zip(list(lon_leftside) + [lon_leftside[0]],lat_tup + [lat_tup[0]]))
+            leftside_coord = list(zip(list(lon_leftside) + [lon_leftside[0]], lat_tup + [lat_tup[0]]))
             leftside_poly = poly_from_coords(leftside_coord)
 
-            #create a world polygon and get intersection
-            world_coord = [(-180,-90),(-180,90),(180,90),(180,-90),(-180,-90)]
+            # create a world polygon and get intersection
+            world_coord = [(-180, -90), (-180, 90), (180, 90), (180, -90), (-180, -90)]
             world_poly = poly_from_coords(world_coord)
 
             leftside_inters = world_poly.Intersection(leftside_poly)
             rightside_inters = world_poly.Intersection(rightside_poly)
 
-            #add both to list
-            list_poly += [leftside_inters,rightside_inters]
+            # add both to list
+            list_poly += [leftside_inters, rightside_inters]
         else:
-            list_coord = list(zip(lon_tup + [lon_tup[0]],lat_tup + [lat_tup[0]]))
+            list_coord = list(zip(lon_tup + [lon_tup[0]], lat_tup + [lat_tup[0]]))
             poly = poly_from_coords(list_coord)
             list_poly.append(poly)
 
@@ -135,6 +139,7 @@ def l1astrip_polygon(l1a_subdir):
     cascadedpoly = multipoly.UnionCascaded()
 
     return cascadedpoly
+
 
 ## TILING AND VECTOR METHODS
 
@@ -171,45 +176,46 @@ def latlon_to_SRTMGL1_naming(lat,lon):
 
     return tile_name
 
-def latlon_to_UTM(lat,lon):
 
-    #utm module excludes regions south of 80°S and north of 84°N, unpractical for global vector manipulation
+def latlon_to_UTM(lat,lon):
+    # utm module excludes regions south of 80°S and north of 84°N, unpractical for global vector manipulation
     # utm_all = utm.from_latlon(lat,lon)
     # utm_nb=utm_all[2]
 
-    #utm zone from longitude without exclusions
-    if -180<=lon<180:
-        utm_nb=int(np.floor((lon+180)/6))+1 #lon=-180 refers to UTM zone 1 towards East (West corner convention)
+    # utm zone from longitude without exclusions
+    if -180 <= lon < 180:
+        utm_nb = int(
+            np.floor((lon + 180) / 6)) + 1  # lon=-180 refers to UTM zone 1 towards East (West corner convention)
     else:
         sys.exit('Longitude value is out of range.')
 
-    if 0<=lat<90: #lat=0 refers to North (South corner convention)
-        epsg='326'+str(utm_nb).zfill(2)
-        utm_zone=str(utm_nb).zfill(2)+'N'
-    elif -90<=lat<0:
-        epsg='327'+str(utm_nb).zfill(2)
-        utm_zone=str(utm_nb).zfill(2)+'S'
+    if 0 <= lat < 90:  # lat=0 refers to North (South corner convention)
+        epsg = '326' + str(utm_nb).zfill(2)
+        utm_zone = str(utm_nb).zfill(2) + 'N'
+    elif -90 <= lat < 0:
+        epsg = '327' + str(utm_nb).zfill(2)
+        utm_zone = str(utm_nb).zfill(2) + 'S'
     else:
         sys.exit('Latitude value is out of range.')
 
     return epsg, utm_zone
 
-def epsg_from_utm(utm_zone):
 
+def epsg_from_utm(utm_zone):
     str_utm_nb = utm_zone[0:2]
     str_utm_ns = utm_zone[2]
 
     if str_utm_ns == 'N':
-        epsg = '326'+str_utm_nb
+        epsg = '326' + str_utm_nb
     elif str_utm_ns == 'S':
-        epsg = '327'+str_utm_nb
+        epsg = '327' + str_utm_nb
     else:
         sys.exit('UTM format not recognized.')
 
     return int(epsg)
 
-def utm_from_epsg(epsg):
 
+def utm_from_epsg(epsg):
     str_epsg = str(epsg)
     str_epsg_ns = str_epsg[0:3]
     str_epsg_nb = str_epsg[3:5]
@@ -223,22 +229,22 @@ def utm_from_epsg(epsg):
 
     return utm
 
-def poly_utm_latlontile(tile_name,utm_zone):
 
+def poly_utm_latlontile(tile_name, utm_zone):
     lat, lon = SRTMGL1_naming_to_latlon(tile_name)
     extent = lon, lat, lon + 1, lat + 1
     poly = poly_from_extent(extent)
 
-    epsg_out = epsg_from_utm(utm_zone) # tile can be projected in whatever utm zone
+    epsg_out = epsg_from_utm(utm_zone)  # tile can be projected in whatever utm zone
     trans = coord_trans(False, 4326, False, epsg_out)
 
     poly.Transform(trans)
 
     return poly
 
-def niceextent_utm_latlontile(tile_name,utm_zone,gsd):
 
-    #create a regularly spaced extent in a utm zone, with 1 overlapping pixel on the edges for reprojections
+#create a regularly spaced extent in a utm zone, with 1 overlapping pixel on the edges for reprojections
+def niceextent_utm_latlontile(tile_name, utm_zone, gsd):
     poly = poly_utm_latlontile(tile_name,utm_zone)
     xmin, ymin, xmax, ymax = extent_from_poly(poly)
 
@@ -249,9 +255,9 @@ def niceextent_utm_latlontile(tile_name,utm_zone,gsd):
 
     return xmin, ymin, xmax, ymax
 
-def create_mem_shp(geom,srs,layer_name='NA',layer_type=ogr.wkbPolygon,field_id='ID',field_val='1'):
 
-    ds = gdal.GetDriverByName('MEMORY').Create('test.shp',0,0,0,gdal.OF_VECTOR)
+def create_mem_shp(geom, srs, layer_name='NA', layer_type=ogr.wkbPolygon, field_id='ID', field_val='1'):
+    ds = gdal.GetDriverByName('MEMORY').Create('test.shp', 0, 0, 0, gdal.OF_VECTOR)
     layer = ds.CreateLayer(layer_name, srs, layer_type)
     # Add one attribute
     layer.CreateField(ogr.FieldDefn(field_id, ogr.OFTInteger))
@@ -281,7 +287,7 @@ def latlontile_nodatamask(geoimg,tile_name):
     #put in a memory vector
     ds_shp = create_mem_shp(poly,srs)
 
-    return geoimg_mask_on_feat_shp_ds(ds_shp,geoimg)
+    return geoimg_mask_on_feat_shp_ds(ds_shp, geoimg)
 
 def poly_from_coords(list_coord):
     # creating granule polygon
@@ -321,9 +327,9 @@ def extent_rast(raster_in):
 
     return extent, proj_wkt
 
-def poly_from_extent(extent):
 
-    #create a polygon from extent, coordinates order as in gdal
+def poly_from_extent(extent):
+    # create a polygon from extent, coordinates order as in gdal
     xmin, ymin, xmax, ymax = extent
 
     ring = ogr.Geometry(ogr.wkbLinearRing)  # creating polygon ring
@@ -338,16 +344,16 @@ def poly_from_extent(extent):
 
     return poly
 
-def extent_from_poly(poly):
 
+def extent_from_poly(poly):
     env = poly.GetEnvelope()
     extent = env[0], env[2], env[1], env[3]
 
     return extent
 
-def coord_trans(is_src_wkt,proj_src,is_tgt_wkt,proj_tgt):
 
-    #choice between WKT or EPSG
+def coord_trans(is_src_wkt, proj_src, is_tgt_wkt, proj_tgt):
+    # choice between WKT or EPSG
     source_proj = osr.SpatialReference()
     if is_src_wkt:
         source_proj.ImportFromWkt(proj_src)
@@ -364,8 +370,8 @@ def coord_trans(is_src_wkt,proj_src,is_tgt_wkt,proj_tgt):
 
     return transform
 
-def list_shp_field_inters_extent(fn_shp,field_name,extent,proj_ext):
 
+def list_shp_field_inters_extent(fn_shp, field_name, extent, proj_ext):
     poly = poly_from_extent(extent)
     driver = ogr.GetDriverByName("ESRI Shapefile")
     ds = driver.Open(fn_shp, 0)
@@ -373,11 +379,11 @@ def list_shp_field_inters_extent(fn_shp,field_name,extent,proj_ext):
 
     proj_shp = layer.GetSpatialRef().ExportToWkt()
 
-    trans = coord_trans(True,proj_ext,True,proj_shp)
+    trans = coord_trans(True, proj_ext, True, proj_shp)
 
     poly.Transform(trans)
 
-    list_field_inters=[]
+    list_field_inters = []
     for feat in layer:
         feat_geom = feat.GetGeometryRef()
         inters = feat_geom.Intersection(poly)
@@ -387,8 +393,8 @@ def list_shp_field_inters_extent(fn_shp,field_name,extent,proj_ext):
 
     return list_field_inters
 
-def create_mem_raster_on_geoimg(geoimg):
 
+def create_mem_raster_on_geoimg(geoimg):
     masktarget = gdal.GetDriverByName('MEM').Create('', geoimg.npix_x, geoimg.npix_y, 1, gdal.GDT_Byte)
     masktarget.SetGeoTransform((geoimg.xmin, geoimg.dx, 0, geoimg.ymax, 0, geoimg.dy))
     masktarget.SetProjection(geoimg.proj_wkt)
@@ -396,26 +402,28 @@ def create_mem_raster_on_geoimg(geoimg):
 
     return masktarget
 
-def geoimg_mask_on_feat_shp_ds(shp_ds,geoimg,layer_name='NA',feat_id='ID',feat_val='1',**kwargs):
 
+def geoimg_mask_on_feat_shp_ds(shp_ds, geoimg, layer_name='NA', feat_id='ID', feat_val='1', **kwargs):
     ds_out = create_mem_raster_on_geoimg(geoimg)
-    rasterize_feat_shp_ds(shp_ds,ds_out,layer_name=layer_name,feat_id=feat_id,feat_val=feat_val,**kwargs)
+    rasterize_feat_shp_ds(shp_ds, ds_out, layer_name=layer_name, feat_id=feat_id, feat_val=feat_val, **kwargs)
     mask = ds_out.GetRasterBand(1).ReadAsArray()
     mask = mask.astype(float)
 
     return mask == 1
 
-def rasterize_feat_shp_ds(shp_ds,raster_ds,layer_name='NA',feat_id='ID',feat_val='1',all_touched=False,exclude=False):
 
+def rasterize_feat_shp_ds(shp_ds, raster_ds, layer_name='NA', feat_id='ID', feat_val='1', all_touched=False,
+                          exclude=False):
     if not exclude:
-        str_eq="='"
+        str_eq = "='"
     else:
-        str_eq="!='"
+        str_eq = "!='"
 
-    sql_stat='SELECT * FROM '+layer_name+' WHERE '+feat_id+str_eq+feat_val+"'"
+    sql_stat = 'SELECT * FROM ' + layer_name + ' WHERE ' + feat_id + str_eq + feat_val + "'"
 
-    opts=gdal.RasterizeOptions(burnValues=[1],bands=[1],SQLStatement=sql_stat,allTouched=all_touched)
-    gdal.Rasterize(raster_ds,shp_ds,options=opts)
+    opts = gdal.RasterizeOptions(burnValues=[1], bands=[1], SQLStatement=sql_stat, allTouched=all_touched)
+    gdal.Rasterize(raster_ds, shp_ds, options=opts)
+
 
 ##INTERP AND STATS METHODS
 
@@ -570,33 +578,33 @@ def interp_lowess(xp, yp, errp, acc_y, rang, kernel='Exc'):
 
     return yp_out, errp_out, errlin_out
 
-def double_sum_covar(tot_err,slope_bin,elev_bin,area_tot,rang):
 
+def double_sum_covar(tot_err, slope_bin, elev_bin, area_tot, rang):
     n = len(tot_err)
 
     dist_bin = np.zeros(n)
-    #change elev binning in distances:
+    # change elev binning in distances:
     bin_size = elev_bin[1] - elev_bin[0]
 
-    for i in range(n-1):
+    for i in range(n - 1):
         ind = elev_bin <= elev_bin[i]
         tmpslope = slope_bin[ind]
 
-        dist_bin[i+1] = np.nansum(bin_size/np.tan(tmpslope*np.pi/180.))
+        dist_bin[i + 1] = np.nansum(bin_size / np.tan(tmpslope * np.pi / 180.))
 
     std_err = 0
     for i in range(n):
         for j in range(n):
-            std_err += kernel_exp(dist_bin[i],dist_bin[j],rang)*tot_err[i]*tot_err[j]*area_tot[i]*area_tot[j]
+            std_err += kernel_exp(dist_bin[i], dist_bin[j], rang) * tot_err[i] * tot_err[j] * area_tot[i] * area_tot[j]
 
-    std_err /= np.nansum(area_tot)**2
+    std_err /= np.nansum(area_tot) ** 2
 
     return np.sqrt(std_err)
 
 
-def hypso_dc(dh_dc, err_dc, ref_elev, mask, gsd, neff_geo=None, neff_num=None, std_stable=None, ddh=None, kern_range=None,
+def hypso_dc(dh_dc, err_dc, ref_elev, mask, gsd, neff_geo=None, neff_num=None, std_stable=None, ddh=None,
+             kern_range=None,
              bin_type='fixed', bin_val=50., filt_bin='3NMAD', method='linear', estim_std=None):
-
     # elevation binning
     min_elev = np.nanmin(ref_elev[mask]) - (np.nanmin(ref_elev[mask]) % bin_val)
     max_elev = np.nanmax(ref_elev[mask]) + 1
@@ -644,10 +652,10 @@ def hypso_dc(dh_dc, err_dc, ref_elev, mask, gsd, neff_geo=None, neff_num=None, s
                 idx_outlier = np.absolute(dh_bin - med_bin[i, :, None]) > 3 * nmad_bin[i, :, None]
 
                 # TODO: NEED TO define criteria for 3NMAD outliers to be along the entire temporal axis
-                occur_outlier = np.count_nonzero(idx_outlier,axis=0)/np.shape(dh_dc)[0]
+                occur_outlier = np.count_nonzero(idx_outlier, axis=0) / np.shape(dh_dc)[0]
                 final_outlier = occur_outlier > 0.2
                 nb_outlier = np.count_nonzero(final_outlier)
-                dh_bin[:,final_outlier] = np.nan
+                dh_bin[:, final_outlier] = np.nan
 
                 # ref_elev_out[idx_orig & np.array(np.absolute(ref_elev_out - med_bin[i]) > 3 * nmad)] = np.nan
                 area_meas_bin[i] -= nb_outlier * gsd ** 2
@@ -720,4 +728,3 @@ def hypso_dc(dh_dc, err_dc, ref_elev, mask, gsd, neff_geo=None, neff_num=None, s
     # return df, ddem_out
 
     return df
-

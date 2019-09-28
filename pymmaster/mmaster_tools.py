@@ -256,7 +256,7 @@ def orient_footprint(fprint):
     # as long as the footprints are coming from the .met file, the upper left corner 
     # will be the maximum y value.
     upper_left = np.argmax(y)
-    new_inds = range(upper_left, len(x)) + range(0, upper_left)
+    new_inds = list(range(upper_left, len(x))) + list(range(0, upper_left))
     return Polygon(list(zip(np.array(x)[new_inds], np.array(y)[new_inds])))
 
 
