@@ -155,6 +155,22 @@ def SRTMGL1_naming_to_latlon(tile_name):
 
     return lat, lon
 
+def latlon_to_SRTMGL1_naming(lat,lon):
+
+    if lat<0:
+        str_lat = 'S'
+    else:
+        str_lat = 'N'
+
+    if lon<0:
+        str_lon = 'W'
+    else:
+        str_lon = 'E'
+
+    tile_name = str_lat+str(int(abs(np.floor(lat)))).zfill(2)+str_lon+str(int(abs(np.floor(lon)))).zfill(3)
+
+    return tile_name
+
 def latlon_to_UTM(lat,lon):
 
     #utm module excludes regions south of 80°S and north of 84°N, unpractical for global vector manipulation
@@ -222,13 +238,14 @@ def poly_utm_latlontile(tile_name,utm_zone):
 
 def niceextent_utm_latlontile(tile_name,utm_zone,gsd):
 
+    #create a regularly spaced extent in a utm zone, with 1 overlapping pixel on the edges for reprojections
     poly = poly_utm_latlontile(tile_name,utm_zone)
     xmin, ymin, xmax, ymax = extent_from_poly(poly)
 
-    xmin = xmin - xmin % gsd
-    ymin = ymin - ymin % gsd
-    xmax = xmax - xmax % gsd
-    ymax = ymax - ymax % gsd
+    xmin = xmin - xmin % gsd - gsd
+    ymin = ymin - ymin % gsd - gsd
+    xmax = xmax - xmax % gsd + gsd
+    ymax = ymax - ymax % gsd + gsd
 
     return xmin, ymin, xmax, ymax
 
@@ -253,12 +270,14 @@ def create_mem_shp(geom,srs,layer_name='NA',layer_type=ogr.wkbPolygon,field_id='
 
     return ds
 
-def latlontile_nodatamask(geoimg,tile_name,utm_zone):
+def latlontile_nodatamask(geoimg,tile_name):
 
     #create latlon tile polygon in utm projection
-    poly = poly_utm_latlontile(tile_name,utm_zone)
+    lat, lon = SRTMGL1_naming_to_latlon(tile_name)
+    extent = lon, lat, lon + 1, lat + 1
+    poly = poly_from_extent(extent)
     srs = osr.SpatialReference()
-    srs.ImportFromEPSG(epsg_from_utm(utm_zone))
+    srs.ImportFromEPSG(4326)
     #put in a memory vector
     ds_shp = create_mem_shp(poly,srs)
 
@@ -274,6 +293,13 @@ def poly_from_coords(list_coord):
     poly.AddGeometry(ring)
 
     return poly
+
+def get_poly_centroid(poly):
+    centroid = poly.Centroid()
+
+    center_lon, center_lat, _ = centroid.GetPoint()
+
+    return center_lon, center_lat
 
 def extent_rast(raster_in):
     ds = gdal.Open(raster_in, gdalconst.GA_ReadOnly)
@@ -315,7 +341,6 @@ def poly_from_extent(extent):
 def extent_from_poly(poly):
 
     env = poly.GetEnvelope()
-
     extent = env[0], env[2], env[1], env[3]
 
     return extent
