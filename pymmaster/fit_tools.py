@@ -533,10 +533,10 @@ def gpr(data, t_vals, uncert, t_pred, opt=False, kernel=None, not_stable=True, d
     else:
         y_out = y_pred.squeeze() + mu_y
 
-    filt_data = data
-    filt_data[np.isfinite(data)] = data_vals
+    # filt_data = data
+    # filt_data[np.isfinite(data)] = data_vals
 
-    return y_out, sigma.squeeze(), filt_data
+    return y_out, sigma.squeeze(), np.isfinite(data)
 
 
 def ls(subarr, t_vals, uncert, weigh, filt_ls=False, conf_filt=0.99):
@@ -584,7 +584,7 @@ def ls(subarr, t_vals, uncert, weigh, filt_ls=False, conf_filt=0.99):
     date_min = np.reshape(date_min, (Y, X))
     date_max = np.reshape(date_max, (Y, X))
 
-    filt_subarr = z_mat.reshape(T, Y, X)
+    filt_subarr = np.isfinite(z_mat.reshape(T, Y, X))
 
     outarr = np.stack((slope, interc, slope_sig, nb_dem, date_min, date_max),axis=0)
 
@@ -596,7 +596,7 @@ def gpr_wrapper(argsin):
     start = time.time()
     Y, X = subarr[0].shape
     outarr = np.nan * np.zeros((new_t.size * 2, Y, X))
-    filt_subarr = np.nan * np.zeros(np.shape(subarr))
+    filt_subarr = np.zeros(np.shape(subarr),dtype=bool)
     # pixel by pixel
     for x in range(X):
         for y in range(Y):
@@ -673,7 +673,7 @@ def unpatchify(arr_shape, subarr, inv, split):
 
     return out
 
-def cube_to_stack(ds, out_cube, y0, nice_fit_t, outfile, ci=True, clobber=False):
+def cube_to_stack(ds, out_cube, y0, nice_fit_t, outfile, ci=True, clobber=False, filt_bool=False):
 
     fit_cube = out_cube[:len(nice_fit_t), :, :]
 
@@ -688,7 +688,14 @@ def cube_to_stack(ds, out_cube, y0, nice_fit_t, outfile, ci=True, clobber=False)
     yo[:] = y
     to[:] = nice_fit_t
 
-    zo = nco.createVariable('z', 'f4', ('time', 'y', 'x'), fill_value=-9999)
+    if not filt_bool:
+        dt = 'f4'
+        fill = -9999
+    else:
+        dt = 'b'
+        fill = 0
+
+    zo = nco.createVariable('z', dt, ('time', 'y', 'x'), fill_value=fill)
     zo.units = 'meters'
     zo.long_name = 'Fit elevation above WGS84 ellipsoid'
     zo.grid_mapping = 'crs'
