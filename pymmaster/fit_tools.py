@@ -240,7 +240,7 @@ def estimate_vgm(fn_stack,shp_mask=None,rast_mask=None,nsamp=10000,tstep=0.25,la
     t_vals = ds['time'].values
 
     y0 = t_vals[0].astype('datetime64[D]').astype(object).year
-    y1 = t_vals[-1].astype('datetime64[D]').astype(object).year + 1.1
+    y1 = t_vals[-1].astype('datetime64[D]').astype(object).year
     total_delta = np.datetime64('{}-01-01'.format(int(y1))) - np.datetime64('{}-01-01'.format(int(y0)))
     ftime_delta = np.array([t - np.datetime64('{}-01-01'.format(int(y0))) for t in t_vals])
     t_scale = (ftime_delta / total_delta) * (int(y1) - y0)
@@ -943,6 +943,7 @@ def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, fil
         print('Processing with ' + str(nproc) + ' cores...')
         # now, try to figure out the nicest way to break up the image, given the number of processors
         # there has to be a better way than this... i'll look into it
+        # TODO: do the tiling with xarray/dask
 
         if method in ['ols','wls']:
             #here calculation is done matricially so we want to use all cores with the largest tiles possible
