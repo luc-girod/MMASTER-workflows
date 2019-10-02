@@ -592,8 +592,16 @@ def ls(subarr, t_vals, uncert, weigh, filt_ls=False, conf_filt=0.99):
 
 @jit
 def gpr_wrapper(argsin):
-    subarr, i, t_vals, err_arr, new_t, opt, kernel, uns_arr = argsin
+    subarr, i, t_vals, med_slope, uncert, new_t, opt, kernel, uns_arr = argsin
     start = time.time()
+
+    # get std, dependent on slope
+    err_arr = np.ones(np.shape(subarr))
+    for j, d in enumerate(uncert):
+        err_arr[j] = err_arr[j] * d
+    err_arr = np.sqrt(err_arr ** 2 + (15 * np.tan(med_slope * np.pi / 180)) ** 2)
+    err_arr[np.logical_or(~np.isfinite(err_arr), np.abs(err_arr) > 100)] = 100
+
     Y, X = subarr[0].shape
     outarr = np.nan * np.zeros((new_t.size * 2, Y, X))
     filt_subarr = np.zeros(np.shape(subarr),dtype=bool)
@@ -673,7 +681,7 @@ def unpatchify(arr_shape, subarr, inv, split):
 
     return out
 
-def cube_to_stack(ds, out_cube, y0, nice_fit_t, outfile, ci=True, clobber=False, filt_bool=False):
+def cube_to_stack(ds, out_cube, y0, nice_fit_t, outfile, slope_arr=None, ci=True, clobber=False, filt_bool=False):
 
     fit_cube = out_cube[:len(nice_fit_t), :, :]
 
@@ -714,6 +722,15 @@ def cube_to_stack(ds, out_cube, y0, nice_fit_t, outfile, ci=True, clobber=False,
         fzo.set_auto_mask(True)
 
         fzo[:] = sig_cube
+
+    if slope_arr is not None:
+        so = nco.createVariable('slope','f4', ('y','x'),fill_value=-9999)
+        so.units = 'degrees'
+        so.long_name = 'median slope used to condition elevation uncertainties'
+        so.grid_mapping = 'crs'
+        so.coordinates = 'x y'
+
+        so[:] = slope_arr
 
     nco.close()
 
@@ -909,13 +926,6 @@ def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, fil
         slope_ref = slope_all.reproject(st.make_geoimg(ds))
         med_slope[np.isnan(med_slope)] = slope_ref.img[np.isnan(med_slope)]
 
-    #get std, dependent on slope
-    err_arr = np.ones(np.shape(ds_arr))
-    for i, d in enumerate(uncert):
-        err_arr[i] = err_arr[i] * d
-    err_arr = np.sqrt(err_arr**2 + (15*np.tan(med_slope*np.pi/180))**2)
-    err_arr[np.logical_or(~np.isfinite(err_arr),np.abs(err_arr)>100)] = 100
-
     # define temporal prediction vector
     if tlim is None:
         y0 = t_vals[0].astype('datetime64[D]').astype(object).year
@@ -933,8 +943,8 @@ def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, fil
     if nproc == 1:
         print('Processing with 1 core...')
         if method == 'gpr':
-            out_cube, filt_cube = gpr_wrapper((ds_arr, 0, t_vals, err_arr, fit_t, opt_gpr, kernel, uns_arr))
-            cube_to_stack(ds, out_cube, y0, nice_fit_t, outfile=outfile, clobber=clobber)
+            out_cube, filt_cube = gpr_wrapper((ds_arr, 0, t_vals, med_slope, uncert, fit_t, opt_gpr, kernel, uns_arr))
+            cube_to_stack(ds, out_cube, y0, nice_fit_t, slope_arr=med_slope, outfile=outfile, clobber=clobber)
             if write_filt:
                 cube_to_stack(ds, filt_cube, y0, t_vals, outfile=fn_filt, clobber=clobber)
         elif method in ['ols', 'wls']:
@@ -945,7 +955,7 @@ def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, fil
             out_arr, filt_cube = ls_wrapper((ds_arr, 0, t_vals, uncert, weig, filt_ls, conf_filt_ls))
             arr_to_img(ds, out_arr, outfile=outfile)
             if write_filt:
-                cube_to_stack(ds, filt_cube, y0, t_vals, outfile=fn_filt, clobber=clobber)
+                cube_to_stack(ds, filt_cube, y0, t_vals, outfile=fn_filt, clobber=clobber, filt_bool=True, ci=False)
     else:
         print('Processing with ' + str(nproc) + ' cores...')
         # now, try to figure out the nicest way to break up the image, given the number of processors
@@ -964,7 +974,7 @@ def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, fil
 
         pool = mp.Pool(nproc, maxtasksperchild=1)
         split_arr = splitter(ds_arr, (n_y_tiles, n_x_tiles))
-        split_err = splitter(err_arr, (n_y_tiles,n_x_tiles))
+        split_slp = splitter(med_slope[None, :, :], (n_y_tiles,n_x_tiles))
 
         if uns_arr is not None:
             split_uns = splitter(uns_arr, (n_y_tiles, n_x_tiles))
@@ -972,7 +982,7 @@ def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, fil
             split_uns = [None] * len(split_arr)
 
         if method == 'gpr':
-            argsin = [(s, i, np.copy(t_vals), split_err[i], np.copy(fit_t), opt_gpr, kernel, split_uns[i]) for i, s in
+            argsin = [(s, i, np.copy(t_vals), split_slp[i], np.copy(uncert) ,np.copy(fit_t), opt_gpr, kernel, split_uns[i]) for i, s in
                       enumerate(split_arr)]
             outputs = pool.map(gpr_wrapper, argsin, chunksize=1)
             pool.close()
@@ -981,10 +991,10 @@ def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, fil
             zip_out = list(zip(*outputs))
 
             out_cube = stitcher(zip_out[0], (n_y_tiles, n_x_tiles))
-            cube_to_stack(ds, out_cube, y0, nice_fit_t, outfile=outfile, clobber=clobber)
+            cube_to_stack(ds, out_cube, y0, nice_fit_t, slope_arr=med_slope, outfile=outfile, clobber=clobber)
             if write_filt:
                 filt_cube = stitcher(zip_out[1], (n_y_tiles, n_x_tiles))
-                cube_to_stack(ds, filt_cube, y0, nice_fit_t, outfile=fn_filt, clobber=clobber)
+                cube_to_stack(ds, filt_cube, y0, t_vals, outfile=fn_filt, clobber=clobber, filt_bool=True, ci=False)
 
         elif method in ['ols', 'wls']:
             if method == 'ols':
@@ -1003,4 +1013,4 @@ def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, fil
             arr_to_img(ds, out_arr, outfile=outfile)
             if write_filt:
                 filt_cube = stitcher(zip_out[1], (n_y_tiles, n_x_tiles))
-                cube_to_stack(ds, filt_cube, y0, nice_fit_t, outfile=fn_filt, clobber=clobber)
+                cube_to_stack(ds, filt_cube, y0, t_vals, outfile=fn_filt, clobber=clobber)
