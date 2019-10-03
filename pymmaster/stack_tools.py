@@ -352,6 +352,8 @@ def merge_stacks(list_ds,nice_latlon_tiling=False):
             ds.variables['z_ci'].values[:,~mask]=np.nan
 
     #TODO: write a "spatial_only" merge? we know that NaNs are the same along temporal axis... would save at least 80x the time of checking NaNs
+
+
     #works as we intend only if coordinates are aligned (see nice coords in other_tools) AND if no values other than NaN intersect (hence the latlontile_nodata mask in stack_tools)
     ds = xr.merge(list_ds)
 
@@ -733,7 +735,7 @@ def create_mmaster_stack(filelist, extent=None, res=None, epsg=None, outfile='mm
             if uncert:
                 stats = read_stats(os.path.dirname(filelist[sorted_inds[ind]]))
                 uo[outind] = stats['RMSE']
-        to[outind] = datelist[ind].toordinal() - dt.date(1900, 1, 1).toordinal()
+        to[outind] = datelist[ind].toordinal() - dt.date(y0, 1, 1).toordinal()
         go[outind] = os.path.basename(filelist[ind]).rsplit('.tif', 1)[0]
         zo[outind, :, :] = img.img
         outind += 1

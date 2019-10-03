@@ -700,8 +700,9 @@ def cube_to_stack(ds, out_cube, y0, nice_fit_t, outfile, slope_arr=None, ci=True
         dt = 'f4'
         fill = -9999
     else:
-        dt = 'b'
-        fill = 0
+        dt = '|b1'
+        fill = False
+        fit_cube = np.array(fit_cube,dtype=bool)
 
     zo = nco.createVariable('z', dt, ('time', 'y', 'x'), fill_value=fill)
     zo.units = 'meters'
@@ -883,6 +884,8 @@ def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, fil
     uncert = ds['uncert'].values[keep_vals]
     ds_arr = ds_arr[keep_vals, :, :]
 
+    filt_vals = (t_vals - np.datetime64('2000-01-01')).astype('timedelta64[D]').astype(int)
+
     # minimum/maximum elevation on Earth
     ds_arr[np.logical_or(ds_arr < -400, ds_arr > 8900)] = np.nan
 
@@ -946,7 +949,7 @@ def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, fil
             out_cube, filt_cube = gpr_wrapper((ds_arr, 0, t_vals, med_slope, uncert, fit_t, opt_gpr, kernel, uns_arr))
             cube_to_stack(ds, out_cube, y0, nice_fit_t, slope_arr=med_slope, outfile=outfile, clobber=clobber)
             if write_filt:
-                cube_to_stack(ds, filt_cube, y0, t_vals, outfile=fn_filt, clobber=clobber)
+                cube_to_stack(ds, filt_cube, y0, filt_vals, outfile=fn_filt, clobber=clobber, filt_bool=True, ci=False)
         elif method in ['ols', 'wls']:
             if method == 'ols':
                 weig = False
@@ -955,7 +958,7 @@ def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, fil
             out_arr, filt_cube = ls_wrapper((ds_arr, 0, t_vals, uncert, weig, filt_ls, conf_filt_ls))
             arr_to_img(ds, out_arr, outfile=outfile)
             if write_filt:
-                cube_to_stack(ds, filt_cube, y0, t_vals, outfile=fn_filt, clobber=clobber, filt_bool=True, ci=False)
+                cube_to_stack(ds, filt_cube, y0, filt_vals, outfile=fn_filt, clobber=clobber, filt_bool=True, ci=False)
     else:
         print('Processing with ' + str(nproc) + ' cores...')
         # now, try to figure out the nicest way to break up the image, given the number of processors
@@ -994,7 +997,7 @@ def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, fil
             cube_to_stack(ds, out_cube, y0, nice_fit_t, slope_arr=med_slope, outfile=outfile, clobber=clobber)
             if write_filt:
                 filt_cube = stitcher(zip_out[1], (n_y_tiles, n_x_tiles))
-                cube_to_stack(ds, filt_cube, y0, t_vals, outfile=fn_filt, clobber=clobber, filt_bool=True, ci=False)
+                cube_to_stack(ds, filt_cube, y0, filt_vals, outfile=fn_filt, clobber=clobber, filt_bool=True, ci=False)
 
         elif method in ['ols', 'wls']:
             if method == 'ols':
@@ -1013,4 +1016,4 @@ def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, fil
             arr_to_img(ds, out_arr, outfile=outfile)
             if write_filt:
                 filt_cube = stitcher(zip_out[1], (n_y_tiles, n_x_tiles))
-                cube_to_stack(ds, filt_cube, y0, t_vals, outfile=fn_filt, clobber=clobber)
+                cube_to_stack(ds, filt_cube, y0, filt_vals, outfile=fn_filt, clobber=clobber, filt_bool=True, ci=False)
