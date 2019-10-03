@@ -393,6 +393,17 @@ def list_shp_field_inters_extent(fn_shp, field_name, extent, proj_ext):
 
     return list_field_inters
 
+def inters_list_poly_with_poly(list_poly,poly):
+
+    list_inters=[]
+    for poly_2 in list_poly:
+        inters = poly_2.Intersection(poly)
+
+        if not inters.IsEmpty():
+            list_inters.append(poly_2)
+
+    return list_inters
+
 
 def create_mem_raster_on_geoimg(geoimg):
     masktarget = gdal.GetDriverByName('MEM').Create('', geoimg.npix_x, geoimg.npix_y, 1, gdal.GDT_Byte)
