@@ -18,7 +18,7 @@ import pandas as pd
 import pymmaster.stack_tools as st
 import pymmaster.other_tools as ot
 import pymmaster.fit_tools as ft
-from pybob.coreg_tools import get_slope, create_stable_mask
+from pybob.coreg_tools import get_slope, create_stable_mask, dem_coregistration
 from pybob.GeoImg import GeoImg
 from pybob.ICESat import ICESat
 from glob import glob
@@ -178,14 +178,14 @@ def icesat_comp_wrapper(argsin):
 
     fn_stack,ice_coords,ice_elev,ice_date,groups,dates,read_filt,fn_shp = argsin
 
-    full_dh = full_z_score = full_dt = full_pos = full_slp = np.array([])
+    full_dh, full_z_score, full_dt, full_pos, full_slp = (np.array([]) for i in range(5))
     ds = xr.open_dataset(fn_stack)
     tile_name = st.tilename_stack(ds)
 
     tmp_h = st.make_geoimg(ds)
     tmp_ci = st.make_geoimg(ds)
     tmp_slope = st.make_geoimg(ds)
-    tmp_slope.slope = ds.slope.values
+    tmp_slope.img = ds.slope.values
 
     ds_sub = ds.interp(time=dates)
 
@@ -219,7 +219,8 @@ def icesat_comp_wrapper(argsin):
         #getting time data as days since 2000
         y0 = np.datetime64('2000-01-01')
         ftime = ds_filt2.time.values
-        ftime_delta = np.array([t - np.datetime64('2000-01-01') for t in ftime])
+        #TODO: temporary correction for wrong stacking: starting date is read as 2100
+        ftime_delta = np.array([t - np.datetime64('2100-01-01') for t in ftime])
         days = [td.astype('timedelta64[D]').astype(int) for td in ftime_delta]
 
         #reindex to get closest not-NaN time value for each of the ICESat laser campaign date
@@ -241,37 +242,30 @@ def icesat_comp_wrapper(argsin):
         subsamp_ice = [tup for i, tup in enumerate(ice_coords) if pts_idx_dt[i]]
 
         tmp_h.img = ds_sub.z[i, :].values
-        comp_pts_h = tmp_h.raster_points(subsamp_ice, nsize=5, mode='linear')
+        comp_pts_h = tmp_h.raster_points(subsamp_ice, nsize=3, mode='linear')
 
         tmp_ci.img = ds_sub.z_ci[i, :].values
-        comp_pts_ci = tmp_ci.raster_points(subsamp_ice, nsize=5, mode='linear')
+        comp_pts_ci = tmp_ci.raster_points(subsamp_ice, nsize=3, mode='linear')
 
-        comp_pts_slope = tmp_slope.raster_points(subsamp_ice, nsize=5, mode='linear')
+        comp_pts_slope = tmp_slope.raster_points(subsamp_ice, nsize=3, mode='linear')
 
-        print(np.shape(comp_pts_h))
-        print(np.shape(comp_pts_ci))
-        print(np.shape(pts_idx_dt))
-        print(np.shape(ice_elev[pts_idx_dt]))
-        dh = ice_elev[pts_idx_dt] - comp_pts_h
-        print(np.shape(dh))
+        dh = ice_elev[pts_idx_dt] - comp_pts_h.squeeze()
         good_vals = np.isfinite(dh)
         dh = dh[good_vals]
-        print(np.shape(dh))
-        print(np.shape(good_vals))
-        z_score = dh / comp_pts_ci[good_vals]
-        slp = comp_pts_slope[good_vals]
+        z_score = dh / comp_pts_ci.squeeze()[good_vals]
+        slp = comp_pts_slope.squeeze()[good_vals]
 
         if read_filt:
             day_diff = (date - y0).astype('timedelta64[D]').astype(int)
             tmp_dt.img = ds_filt_sub.z[i, :].values - np.ones(np.shape(tmp_dt.img)) * day_diff
-            comp_pts_dt = tmp_dt.raster_points(subsamp_ice, nsize=5, mode='mean')
+            comp_pts_dt = tmp_dt.raster_points(subsamp_ice, nsize=3, mode='mean')
             dt_out = comp_pts_dt[good_vals]
         else:
             dt_out = np.zeros(len(dh)) * np.nan
 
         if fn_shp is not None:
             comp_pts_mask = tmp_mask.raster_points(subsamp_ice, nsize=5, mode='nearest')
-            pos = comp_pts_mask.astype(dtype=bool)
+            pos = comp_pts_mask.squeeze()[good_vals].astype(dtype=bool)
         else:
             pos = np.ones(len(dh),dtype=bool)
 
@@ -284,7 +278,7 @@ def icesat_comp_wrapper(argsin):
     return full_dh, full_z_score, full_dt, full_pos, full_slp
 
 
-def comp_stacks_icesat(list_fn_stack,fn_icesat,fn_shp=None,nproc=1,read_filt=False):
+def comp_stacks_icesat(list_fn_stack,fn_icesat,fn_shp=None,nproc=1,read_filt=False,shift=None):
 
     ice = ICESat(fn_icesat)
     ice.clean(el_limit=-200)
@@ -349,7 +343,7 @@ def comp_stacks_icesat(list_fn_stack,fn_icesat,fn_shp=None,nproc=1,read_filt=Fal
             icesat_argsin.append((fn_stack,np.copy(ice_coords),np.copy(ice_elev),np.copy(ice_date),groups,dates,read_filt,fn_shp))
 
     if nproc == 1:
-        list_dh = list_zsc = list_dt = list_pos = list_slp = []
+        list_dh, list_zsc, list_dt, list_pos, list_slp = ([] for i in range(5))
         for i in range(len(icesat_argsin)):
             tmp_dh, tmp_zsc, tmp_dt, tmp_pos, tmp_slp = icesat_comp_wrapper(icesat_argsin[i])
             list_dh.append(tmp_dh)
@@ -380,6 +374,14 @@ def comp_stacks_icesat(list_fn_stack,fn_icesat,fn_shp=None,nproc=1,read_filt=Fal
         slp = np.concatenate(zip_out[4])
 
     return dh, zsc, dt_out, pos, slp
+
+def shift_icesat_stack(fn_ref,fn_icesat,fn_shp):
+
+    #we coregister
+    _ , _ , shift_params, stats = dem_coregistration(fn_icesat,fn_ref,fn_shp,pts=True,inmem=True)
+
+    print(shift_params)
+    print(stats)
 
 
 def postproc_stacks_tvol(list_fn_stack, fn_shp, feat_id='RGIId', tlim=None, write_combined=True, outdir='.'):

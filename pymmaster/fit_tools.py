@@ -700,7 +700,7 @@ def cube_to_stack(ds, out_cube, y0, nice_fit_t, outfile, slope_arr=None, ci=True
         dt = 'f4'
         fill = -9999
     else:
-        dt = '|b1'
+        dt = 'i1'
         fill = False
         fit_cube = np.array(fit_cube,dtype=bool)
 
