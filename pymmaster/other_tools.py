@@ -613,9 +613,8 @@ def double_sum_covar(tot_err, slope_bin, elev_bin, area_tot, rang):
     return np.sqrt(std_err)
 
 
-def hypso_dc(dh_dc, err_dc, ref_elev, mask, gsd, neff_geo=None, neff_num=None, std_stable=None, ddh=None,
-             kern_range=None,
-             bin_type='fixed', bin_val=50., filt_bin='3NMAD', method='linear', estim_std=None):
+def hypso_dc(dh_dc, err_dc, ref_elev, tvals, mask, gsd, bin_type='fixed', bin_val=50., filt_bin='3NMAD', method='linear'):
+
     # elevation binning
     min_elev = np.nanmin(ref_elev[mask]) - (np.nanmin(ref_elev[mask]) % bin_val)
     max_elev = np.nanmax(ref_elev[mask]) + 1
@@ -634,8 +633,10 @@ def hypso_dc(dh_dc, err_dc, ref_elev, mask, gsd, neff_geo=None, neff_num=None, s
     err_on_mask = err_dc[:, mask]
 
     # local hypsometric method (McNabb et al., 2019)
-    elev_bin = slope_bin = area_tot_bin = area_meas_bin = np.zeros(nb_bin) * np.nan
-    nmad_bin = mean_bin = med_bin = std_bin = sum_err_bin = np.zeros((nb_bin, np.shape(dh_dc)[0])) * np.nan
+
+    #preallocating
+    elev_bin, slope_bin, area_tot_bin, area_meas_bin, nmad_bin = (np.zeros(nb_bin) * np.nan for i in range(5))
+    mean_bin, std_bin, ss_err_bin = (np.zeros((nb_bin, np.shape(dh_dc)[0])) * np.nan for i in range(3))
 
     for i in np.arange(nb_bin):
 
@@ -656,79 +657,51 @@ def hypso_dc(dh_dc, err_dc, ref_elev, mask, gsd, neff_geo=None, neff_num=None, s
 
         if nvalid > 0:
 
-            med_bin[i, :] = np.nanmedian(dh_bin, axis=1)
             if filt_bin == '3NMAD':
-                mad = np.nanmedian(np.absolute(dh_bin - med_bin[i, :, None]), axis=1)
-                nmad_bin[i, :] = 1.4826 * mad
-                idx_outlier = np.absolute(dh_bin - med_bin[i, :, None]) > 3 * nmad_bin[i, :, None]
 
-                # TODO: NEED TO define criteria for 3NMAD outliers to be along the entire temporal axis
-                occur_outlier = np.count_nonzero(idx_outlier, axis=0) / np.shape(dh_dc)[0]
-                final_outlier = occur_outlier > 0.2
-                nb_outlier = np.count_nonzero(final_outlier)
-                dh_bin[:, final_outlier] = np.nan
+                # this is for a temporally varying NMAD, which doesn't seem to always be relevant...
+                # need to change preallocation if using this one
+                #     mad = np.nanmedian(np.absolute(dh_bin - med_bin[i, :, None]), axis=1)
+                #     nmad_bin[i, :] = 1.4826 * mad
+                #     idx_outlier = np.absolute(dh_bin - med_bin[i, :, None]) > 3 * nmad_bin[i, :, None]
+                #     dh_bin[idx_outlier] = np.nan
+
+                # this is for a fixed NMAD using only the max dh
+                dh_tot = dh_bin[-1,:]
+                med_tot = np.nanmedian(dh_bin)
+                mad = np.nanmedian(np.absolute(dh_bin) - med_tot)
+                nmad_bin[i] = 1.4826*mad
+                idx_outlier = np.absolute(dh_tot - med_tot) > 3 * nmad_bin[i]
+                nb_outlier = np.count_nonzero(idx_outlier)
+                dh_bin[:,idx_outlier] = np.nan
+                area_meas_bin[i] -= nb_outlier * gsd ** 2
 
                 # ref_elev_out[idx_orig & np.array(np.absolute(ref_elev_out - med_bin[i]) > 3 * nmad)] = np.nan
-                area_meas_bin[i] -= nb_outlier * gsd ** 2
+
             std_bin[i, :] = np.nanstd(dh_bin, axis=1)
-            # mean_bin[i,:] = np.nanmean(dh_bin,axis=0)
+
+            #normal mean
+            # mean_bin[i,:] = np.nanmean(dh_bin,axis=1)
+
             # weighted mean
             weights = 1. / err_bin ** 2
             mean_bin[i, :] = np.nansum(dh_bin * weights, axis=1) / np.nansum(weights, axis=1)
-            sum_err_bin[i, :] = np.nansum(err_bin, axis=1)
+            ss_err_bin[i, :] = np.sqrt(np.nanmean(err_bin**2, axis=1))
+
             # ref_elev_out[idx_orig & np.isnan(ref_elev_out)] = mean_bin[i]
 
-    # first, get standard error for all non-void bins
-    idx_nonvoid = area_meas_bin > 0
+    final_mean = mean_bin
+    final_err = ss_err_bin
 
-    area_tot = np.sum(area_tot_bin)
-
-    if estim_std is not None:
-        std_bin = estim_std
-
-    std_err_bin = std_fin_bin = nonvoid_err_bin = np.zeros(nb_bin) * np.nan
-
-    std_fin_bin[idx_nonvoid] = std_err_finite(std_bin[idx_nonvoid], neff_geo * area_tot_bin[idx_nonvoid] / area_tot,
-                                              neff_geo * area_meas_bin[idx_nonvoid] / area_tot)
-    std_err_bin[idx_nonvoid] = std_err(std_stable, neff_num * area_meas_bin[idx_nonvoid] / area_tot)
-    nonvoid_err_bin[idx_nonvoid] = np.sqrt(std_fin_bin[idx_nonvoid] ** 2 + std_err_bin[idx_nonvoid] ** 2)
-
-    if method == 'linear':
-        # first, do a leave-one out linear interpolation to remove non-void bins with really low confidence
-        loo_mean, loo_std_err, loo_lin_err = interp_linear(elev_bin, mean_bin, nonvoid_err_bin, ddh, loo=True)
-        loo_full_err = np.sqrt(loo_std_err ** 2 + loo_lin_err ** 2)
-        idx_low_conf = nonvoid_err_bin > loo_full_err
-        idx_final_void = np.logical_and(np.invert(idx_nonvoid), idx_low_conf)
-
-        # then, interpolate for all of those bins
-        mean_bin[idx_final_void] = np.nan
-        nonvoid_err_bin[idx_final_void] = np.nan
-        final_mean, final_std_err, final_lin_err = interp_linear(elev_bin, mean_bin, nonvoid_err_bin, ddh,
-                                                                 loo=False)
-        final_std_err[~idx_final_void] = 0
-
-    elif method == 'lowess':
-
-        final_mean, final_std_err, final_lin_err = interp_lowess(elev_bin, mean_bin, nonvoid_err_bin, ddh, kern_range)
-        final_std_err[idx_nonvoid] = 0
-
-    else:
-        print('Inter-bin interpolation method must be "linear" or "lowess"')
-        sys.exit()
-
-    final_std_err[np.isnan(final_std_err)] = 0
-    final_lin_err[np.isnan(final_lin_err)] = 0
-    interbin_err = np.sqrt(final_std_err ** 2 + final_lin_err ** 2)
-    intrabin_err = std_fin_bin
-    intrabin_err[np.isnan(intrabin_err)] = 0
-    final_mean[idx_nonvoid] = mean_bin[idx_nonvoid]
-
-    tot_err = np.sqrt(interbin_err ** 2 + intrabin_err ** 2)
-
+    hypso_index = np.array([h for h in elev_bin for t in tvals])
+    time_index = np.array([t for h in elev_bin for t in tvals])
+    #dataframe with hypsometric mean and error for all time steps
     df = pd.DataFrame()
-    df = df.assign(elev=elev_bin, mean_dh=mean_bin, std_dh=std_bin, slope=slope_bin, f_mean=final_mean,
-                   intra_err=intrabin_err, inter_err=interbin_err, area_tot=area_tot_bin, area_meas=area_meas_bin,
-                   tot_err=tot_err)
+    df = df.assign(hypso=hypso_index, time=time_index, dh=final_mean.flatten(), err_dh=final_err.flatten())
+
+    #dataframe with hypsometric data
+    df_hyp = pd.DataFrame()
+    df_hyp = df_hyp.assign(hypso=elev_bin,area_meas=area_meas_bin,area_tot=area_tot_bin,nmad=nmad_bin)
 
     # for i in np.arange(nb_bin):
     #     idx_orig = np.array(ref_elev >= bins_on_mask[i]) & np.array(
@@ -736,6 +709,6 @@ def hypso_dc(dh_dc, err_dc, ref_elev, mask, gsd, neff_geo=None, neff_num=None, s
     #     if not idx_nonvoid[i]:
     #         ref_elev_out[idx_orig] = final_mean[i]
 
-    # return df, ddem_out
+    # return df, dc_out
 
-    return df
+    return df, df_hyp

@@ -67,7 +67,7 @@ def sel_dc(ds, tlim, mask):
     dc = ds.sel(dict(time=slice(time1, time2), x=slice(minx, maxx), y=slice(miny, maxy)))
     submask = mask[np.min(index[0]):np.max(index[0] + 1), np.min(index[1]):np.max(index[1] + 1)]
 
-    return dc, submask
+    return dc, submask, (slice(minx,maxx),slice(miny,maxy))
 
 def int_dc(dc, mask, **kwargs):
     # integrate data cube over masked area
@@ -80,7 +80,9 @@ def int_dc(dc, mask, **kwargs):
     t, y, x = np.shape(dh)
     dx = np.round((dc.x.max().values - dc.x.min().values) / float(x))
 
-    # df , _ = ot.hypso_dc()
+    df = ot.hypso_dc(dh,err,ref_elev,mask,dx,**kwargs)
+
+    return df
 
 def get_inters_stack_dem(list_fn_stack,ext,proj):
 
@@ -214,7 +216,9 @@ def icesat_comp_wrapper(argsin):
         ind_firstdate = sorted(ind_firstdate)
         ds_filt2 = ds_filt.isel(time=np.array(ind_firstdate))
         for i in range(len(dates_rm_dupli)):
-            ds_filt2.z.values[i,:] = np.any(ds_filt.z[t_vals==dates_rm_dupli[i],:].values,axis=0)
+            t_ind = (t_vals==dates_rm_dupli[i])
+            if len(t_ind)>1:
+                ds_filt2.z.values[i,:] = np.any(ds_filt.z[t_vals==dates_rm_dupli[i],:].values,axis=0)
 
         #getting time data as days since 2000
         y0 = np.datetime64('2000-01-01')
@@ -378,13 +382,13 @@ def comp_stacks_icesat(list_fn_stack,fn_icesat,fn_shp=None,nproc=1,read_filt=Fal
 def shift_icesat_stack(fn_ref,fn_icesat,fn_shp):
 
     #we coregister
-    _ , _ , shift_params, stats = dem_coregistration(fn_icesat,fn_ref,fn_shp,pts=True,inmem=True)
+    _ , _ , shift_params, stats = dem_coregistration(fn_icesat,fn_ref,glaciermask=fn_shp,pts=True,inmem=True)
 
     print(shift_params)
     print(stats)
 
 
-def postproc_stacks_tvol(list_fn_stack, fn_shp, feat_id='RGIId', tlim=None, write_combined=True, outdir='.'):
+def combine_postproc_stacks_tvol(list_fn_stack, fn_shp, feat_id='RGIId', tlim=None, write_combined=True, outdir='.'):
     # get all rgiid intersecting stacks and the list of intersecting stacks
     all_rgiids, list_list_stacks = inters_feat_shp_stacks(fn_shp, list_fn_stack, feat_id)
 
@@ -392,7 +396,7 @@ def postproc_stacks_tvol(list_fn_stack, fn_shp, feat_id='RGIId', tlim=None, writ
     list_tuples = list(zip(all_rgiids, list_list_stacks))
     grouped = [(k, list(list(zip(*g))[0])) for k, g in groupby(list_tuples, itemgetter(1))]
 
-    # loop through similar combination of stacks (that way, only have to combine them once)
+    # loop through similar combination of stacks (that way, only have to combine/open them once)
     for i in range(len(grouped)):
 
         list_fn_stack_pack = grouped[0]
@@ -409,6 +413,7 @@ def postproc_stacks_tvol(list_fn_stack, fn_shp, feat_id='RGIId', tlim=None, writ
             out_nc = os.path.join(outdir, 'combined_stacks', '_'.join(list_tile))
             ds.to_netcdf(out_nc)
 
+        df_tot = pd.DataFrame()
         # loop through rggiids
         for rgiid in rgiid_pack:
             ds_shp = gdal.OpenEx(fn_shp, gdal.OF_VECTOR)
@@ -416,5 +421,96 @@ def postproc_stacks_tvol(list_fn_stack, fn_shp, feat_id='RGIId', tlim=None, writ
             geoimg = st.make_geoimg(ds, 0)
             mask = ot.geoimg_mask_on_feat_shp_ds(ds_shp, geoimg, layer_name=layer_name, feat_id=feat_id, feat_val=rgiid)
 
-            dc, submask = sel_dc(ds, tlim, mask)
-            int_dc(dc, submask)
+            dc, submask, _ = sel_dc(ds, tlim, mask)
+            df = int_dc(dc, submask)
+
+            df_tot.append(df)
+
+def sel_int_hypsocheat(argsin):
+
+    # integrate volume without having to know the exact spatial disposition: works for hypsometric (needs only reference elevation)
+    # a LOT faster as we don't need to combine (reproject + merge) stacks
+    list_fn_stack_pack, shp_params, tlim = argsin
+
+    list_ds = st.open_datasets(list_fn_stack_pack)
+    fn_shp, feat_id, feat_val = shp_params
+    ds_shp = gdal.OpenEx(fn_shp, gdal.OF_VECTOR)
+    layer_name = os.path.splitext(os.path.basename(fn_shp))[0]
+
+    dh, err, ref = ([] for i in range(3))
+    for ds in list_ds:
+        #get raster equivalent of stack
+        geoimg = st.make_geoimg(ds, 0)
+        #get mask of latlon tiling
+        tile_name = st.tilename_stack(ds)
+        mask_tile = ot.latlontile_nodatamask(geoimg,tile_name)
+        mask_feat = ot.geoimg_mask_on_feat_shp_ds(ds_shp, geoimg, layer_name=layer_name, feat_id=feat_id, feat_val=feat_val)
+
+        mask = np.logical_and(mask_tile,mask_feat)
+
+        dc, submask, _ = sel_dc(ds,tlim,mask)
+
+        tmp_dh = dc.z.values[:,submask] - dc.z.values[0,submask]
+        tmp_err = np.sqrt(dc.z_ci.values[:,submask]**2 + dc.z_ci.values[0,submask]**2)
+        tmp_ref = dc.z.values[0,submask]
+
+        dh.append(tmp_dh)
+        err.append(tmp_err)
+        ref.append(tmp_ref)
+
+    dh = np.concatenate(dh,axis=1)
+    err = np.concatenate(err,axis=1)
+    ref = np.concatenate(ref)
+
+    ds = list_ds[0]
+    tvals = ds.time.values
+    x = ds.x.shape[0]
+    dx = np.round((ds.x.max().values - ds.x.min().values) / float(x))
+
+    df, df_hyp = ot.hypso_dc(dh,err,ref,tvals,np.ones(np.shape(ref),dtype=bool),dx)
+
+    df['rgiid']=feat_val
+    df_hyp['rgiid']=df_hyp
+
+    return df, df_hyp
+
+def hypsocheat_postproc_stacks_tvol(list_fn_stack, fn_shp, feat_id='RGIId', tlim=None,nproc=64, outfile='int_dh.csv'):
+    # get all rgiid intersecting stacks and the list of intersecting stacks
+    all_rgiids, list_list_stacks = inters_feat_shp_stacks(fn_shp, list_fn_stack, feat_id)
+
+    if nproc == 1:
+        df_final = pd.DataFrame()
+        df_hyp_final = pd.DataFrame
+        for rgiid in all_rgiids:
+
+            list_fn_stack_pack = list_list_stacks[all_rgiids.index(rgiid)]
+
+            shp_params = (fn_shp,feat_id,rgiid)
+            df, df_hyp = sel_int_hypsocheat((list_fn_stack_pack,shp_params,tlim))
+            df_final = df_final.append(df)
+            df_hyp_final = df_hyp_final.append(df_hyp)
+    else:
+        argsin = [(list_list_stacks[all_rgiids.index(rgiid)], (fn_shp, feat_id, rgiid), tlim) for rgiid in all_rgiids]
+        pool = mp.Pool(nproc,maxtasksperchild=1)
+        outputs = pool.map(sel_int_hypsocheat,argsin)
+        pool.close()
+        pool.join()
+
+        zips = list(zip(*outputs))
+
+        dfs = zips[0]
+        dfs_hyp = zips[1]
+
+        df_final = pd.DataFrame()
+        for df in dfs:
+            df_final = df_final.append(df)
+
+        df_hyp_final = pd.DataFrame()
+        for df_hyp in dfs_hyp:
+            df_hyp_final = df_hyp_final.append(df_hyp)
+
+    fn_csv = os.path.join(os.path.dirname(outfile),os.path.splitext(os.path.basename(outfile))[0]+'_all.csv')
+    fn_hyp_csv =  os.path.join(os.path.dirname(outfile),os.path.splitext(os.path.basename(outfile))[0]+'_hyp.csv')
+    df_final.to_csv(fn_csv)
+    df_hyp_final.to_csv(fn_hyp_csv)
+
