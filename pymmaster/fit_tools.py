@@ -34,6 +34,7 @@ from pybob.image_tools import create_mask_from_shapefile
 from pybob.plot_tools import set_pretty_fonts
 # from pymmaster.stack_tools import create_crs_variable, create_nc
 import pymmaster.stack_tools as st
+import pymmaster.tdem_tools as tt
 from pybob.ddem_tools import nmad
 from warnings import filterwarnings
 
@@ -98,6 +99,23 @@ def make_dh_animation(ds, month_a_year=None, figsize=(8,10), t0=None, t1=None, d
 def write_animation(fig, ims, outfilename='output.gif', ani_writer='imagemagick', **kwargs):
     ani = animation.ArtistAnimation(fig, ims, **kwargs)
     ani.save(outfilename, writer=ani_writer)
+
+def get_full_dh(ds,t0,t1,outname):
+
+    tmp_img = st.make_geoimg(ds)
+
+    dc = ds.sel(time=slice(t0,t1))
+
+    dh = dc.variables['z'].values[-1] - dc.variables['z'].values[0]
+    err = np.sqrt(dc.variables['z_ci'].values[-1] ** 2 + dc.variables['z_ci'].values[0] ** 2)
+    # slope = ds.slope.values
+
+    tmp_img.img = dh
+    tmp_img.write(os.path.join(os.path.dirname(outname),os.path.basename(outname)+'_dh.tif'))
+    tmp_img.img = err
+    tmp_img.write(os.path.join(os.path.dirname(outname),os.path.basename(outname)+'_err.tif'))
+    # tmp_img.img = slope
+    # tmp_img.write(os.path.join(os.path.dirname(outname),os.path.basename(outname)+'_slope.tif'))
 
 
 def get_stack_mask(maskshp, ds):
@@ -533,10 +551,10 @@ def gpr(data, t_vals, uncert, t_pred, opt=False, kernel=None, not_stable=True, d
     else:
         y_out = y_pred.squeeze() + mu_y
 
-    # filt_data = data
-    # filt_data[np.isfinite(data)] = data_vals
+    filt_data = data
+    filt_data[np.isfinite(data)] = data_vals
 
-    return y_out, sigma.squeeze(), np.isfinite(data)
+    return y_out, sigma.squeeze(), np.isfinite(filt_data)
 
 
 def ls(subarr, t_vals, uncert, weigh, filt_ls=False, conf_filt=0.99):
@@ -597,8 +615,7 @@ def gpr_wrapper(argsin):
 
     # get std, dependent on slope
     err_arr = np.ones(np.shape(subarr))
-    for j, d in enumerate(uncert):
-        err_arr[j] = err_arr[j] * d
+    err_arr = err_arr * uncert[:,None,None]
     err_arr = np.sqrt(err_arr ** 2 + (15 * np.tan(med_slope * np.pi / 180)) ** 2)
     err_arr[np.logical_or(~np.isfinite(err_arr), np.abs(err_arr) > 100)] = 100
 
@@ -618,6 +635,7 @@ def gpr_wrapper(argsin):
             filt_subarr[: , y, x] = tmp_filt
             outarr[:, y, x] = out
     elaps = time.time() - start
+
     print('Done with block {}, elapsed time {}.'.format(i, elaps))
     return outarr, filt_subarr
 
@@ -701,7 +719,7 @@ def cube_to_stack(ds, out_cube, y0, nice_fit_t, outfile, slope_arr=None, ci=True
         fill = -9999
     else:
         dt = 'i1'
-        fill = False
+        fill = 0
         fit_cube = np.array(fit_cube,dtype=bool)
 
     zo = nco.createVariable('z', dt, ('time', 'y', 'x'), fill_value=fill)
@@ -786,6 +804,28 @@ def nanmax(a):
 def nanmin(a):
     return np.nanmin(a)
 
+def wrapper_slope(argsin):
+
+    arr, in_met = argsin
+
+    #create input image
+    gt, proj, npix_x, npix_y = in_met
+    drv = gdal.GetDriverByName('MEM')
+    dst = drv.Create('', npix_x, npix_y, 1, gdal.GDT_Float32)
+    sp = dst.SetProjection(proj)
+    sg = dst.SetGeoTransform(gt)
+    out_arr = np.copy(arr)
+    out_arr[np.isnan(out_arr)] = -9999
+    wa = dst.GetRasterBand(1).WriteArray(out_arr)
+    md = dst.SetMetadata({'Area_or_point': 'Point'})
+    nd = dst.GetRasterBand(1).SetNoDataValue(-9999)
+    del sp, sg, wa, md, nd
+    tmp_z = GeoImg(dst)
+
+    slope = get_slope(tmp_z)
+
+    return slope.img
+
 def maxmin_disk_filter(argsin):
 
     arr, rad = argsin
@@ -805,11 +845,11 @@ def spat_filter_ref(ds_arr, ref_dem, cutoff_kern_size=500, cutoff_thr=20.,nproc=
     rad = int(np.floor(cutoff_kern_size / res))
 
     if nproc == 1:
-        print('Filtering with 1 proc...')
+        print('Filtering min/max in radius of '+str(cutoff_kern_size)+'m, base threshold of '+str(cutoff_thr)+'m on 1 proc...')
         max_arr, min_arr = maxmin_disk_filter((ref_arr, rad))
     else:
-        print('Filtering with '+str(nproc)+' procs...')
-        nopt=int(np.ceil(np.sqrt(nproc)))
+        print('Filtering min/max in radius of '+str(cutoff_kern_size)+'m, base threshold of '+str(cutoff_thr)+'m on '+str(nproc)+' procs...')
+        nopt=int(np.floor(np.sqrt(nproc)))
         nblocks=[nopt,nopt]
         patches, inv, split = patchify(ref_arr,nblocks,rad)
 
@@ -866,23 +906,62 @@ def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, fil
         xmin, xmax, ymin, ymax = fit_extent
         ds = ds.sel(x=slice(xmin,xmax),y=slice(ymin,ymax))
     # ds.load()
-    ds_arr = ds.variables['z'].values
+
+    print('Original temporal size of stack is '+str(ds.time.size))
+    print('Original spatial size of stack is '+str(ds.x.size)+','+str(ds.y.size))
 
     if inc_mask is not None:
+        ds_orig = ds.copy()
         land_mask = get_stack_mask(inc_mask, ds)
-        ds_arr[:, ~land_mask] = np.nan
+        ds, submask, slices = tt.sel_dc(ds,None,land_mask)
+        print('Including only '+str(np.count_nonzero(land_mask))+' pixels out of '+ str(np.shape(land_mask)[0]*np.shape(land_mask)[1]) +' on this tile')
+        ds_arr = ds.z.values
+        ds_arr[:, ~submask] = np.nan
+        print('Consequently removing void DEMs...')
+        non_void = np.count_nonzero(np.isfinite(ds_arr),axis=(1,2)) > 0
+        ds = ds.isel(time=non_void)
+
+    print('Temporal size of stack is now: '+str(ds.time.size))
+    print('Spatial size of stack is now: '+str(ds.x.size)+','+str(ds.y.size))
+
+    print('Filtering with max RMSE of 20...')
+
+    keep_vals = ds.uncert.values < 20
+    ds = ds.isel(time=keep_vals)
+
+    print('Temporal size of stack is now: '+str(ds.time.size))
+
+    print('Merging ASTER DEMs with exact same date...')
+
+    t_vals = ds.time.values
+    dates_rm_dupli = list(set(list(t_vals)))
+    ind_firstdate = []
+    for i, date in enumerate(dates_rm_dupli):
+        ind_firstdate.append(list(t_vals).index(date))
+    ind_firstdate = sorted(ind_firstdate)
+    ds_filt = ds.isel(time=np.array(ind_firstdate))
+    for i in range(len(dates_rm_dupli)):
+        t_ind = (t_vals == dates_rm_dupli[i])
+        if len(t_ind)>1:
+            #careful, np.nansum gives back zero for an axis full of NaNs
+            mask_nan = np.all(np.isnan(ds.z.values[t_ind,:]),axis=0)
+            ds_filt.z.values[i, :] = np.nansum(ds.z.values[t_ind, :] * 1./ds.uncert.values[t_ind,None,None]**2, axis=0)/np.nansum(1./ds.uncert.values[t_ind,None,None]**2, axis=0)
+            ds_filt.z.values[i, mask_nan] = np.nan
+            ds_filt.uncert.values[i] = np.nansum(ds.uncert.values[t_ind] * 1./ds.uncert.values[t_ind]**2) / np.nansum(1./ds.uncert.values[t_ind]**2)
+
+    ds = ds_filt
+
+    print('Final temporal size of stack is '+str(ds.time.size))
+
+    ds_arr = ds.z.values
+    t_vals = ds.time.values
+    uncert = ds.uncert.values
 
     if gla_mask is not None:
         uns_mask = get_stack_mask(gla_mask, ds)
         uns_arr = uns_mask[np.newaxis,:,:]
     else:
         uns_arr = None
-
-    print('Filtering...')
-    keep_vals = ds['uncert'].values < 20
-    t_vals = ds['time'].values[keep_vals]
-    uncert = ds['uncert'].values[keep_vals]
-    ds_arr = ds_arr[keep_vals, :, :]
 
     filt_vals = (t_vals - np.datetime64('2000-01-01')).astype('timedelta64[D]').astype(int)
 
@@ -895,32 +974,43 @@ def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, fil
         tmp_dem = GeoImg(fn_ref_dem)
         ref_dem = tmp_dem.reproject(tmp_geo)
         if filt_ref == 'min_max':
-            print('Filtering with using min/max values in {}'.format(fn_ref_dem))
+            print('Filtering spatially using min/max values in {}'.format(fn_ref_dem))
             ds_arr = spat_filter_ref(ds_arr, ref_dem, nproc=nproc)
         elif filt_ref == 'time':
             if ref_dem_date is None:
                 print('Reference DEM time stamp not specified, defaulting to 01.01.2000')
                 ref_dem_date = np.datetime64('2000-01-01')
-            print('Filtering using dh/dt value to reference DEM, threshold of {} m/a'.format(time_filt_thresh))
+            print('Filtering temporally with threshold of {} m/a'.format(time_filt_thresh))
             ds_arr = time_filter_ref(ds_arr, t_vals, ref_dem, ref_dem_date, thresh=time_filt_thresh)
         elif filt_ref == 'both':
-            print('Filtering using min/max values in {}'.format(fn_ref_dem))
+            print('Filtering spatially using min/max values in {}'.format(fn_ref_dem))
             ds_arr = spat_filter_ref(ds_arr, ref_dem, cutoff_kern_size=200, cutoff_thr=200., nproc=nproc)
             ds_arr = spat_filter_ref(ds_arr, ref_dem, cutoff_kern_size=500, cutoff_thr=50., nproc=nproc)
             ds_arr = spat_filter_ref(ds_arr, ref_dem, cutoff_kern_size=2000, cutoff_thr=20, nproc=int(np.floor(nproc/4)))
             if ref_dem_date is None:
                 print('Reference DEM time stamp not specified, defaulting to 01.01.2000')
                 ref_dem_date = np.datetime64('2000-01-01')
-            print('Filtering using dh/dt value to reference DEM, threshold of {} m/a'.format(time_filt_thresh))
+            print('Filtering temporally with threshold of {} m/a'.format(time_filt_thresh))
             ds_arr = time_filter_ref(ds_arr, t_vals, ref_dem, ref_dem_date, thresh=time_filt_thresh)
 
     #get median slope from ASTER data + reference DEM if provided (better to avoid having NaN slope on the edge pixels)
-    print('Estimating terrain slope to constrain uncertainties...')
-    err_arr = np.zeros(np.shape(ds_arr))
-    for i in range(len(t_vals)):
-        slope = get_slope(st.make_geoimg(ds,i))
-        slope.img[slope.img>70] = np.nan
-        err_arr[i,:,:] = slope.img
+    if nproc == 1:
+        print('Estimating terrain slope to constrain uncertainties with 1 proc...')
+        err_arr = np.zeros(np.shape(ds_arr))
+        for i in range(len(t_vals)):
+            slope = get_slope(st.make_geoimg(ds,i))
+            slope.img[slope.img>70] = np.nan
+            err_arr[i,:,:] = slope.img
+    else:
+        print('Estimating terrain slope to constrain uncertainties with '+str(nproc)+' procs...')
+        tmp_img = st.make_geoimg(ds)
+        in_met = (tmp_img.gt, tmp_img.proj_wkt, tmp_img.npix_x, tmp_img.npix_y)
+        argsin_z = [(ds_arr[i,:],in_met) for i in range(ds.time.size)]
+        pool = mp.Pool(nproc, maxtasksperchild=1)
+        outputs_z = pool.map(wrapper_slope, argsin_z, chunksize=1)
+        pool.close()
+        pool.join()
+        err_arr = np.stack(outputs_z, axis=0)
     med_slope = np.nanmedian(err_arr,axis=0)
 
     if fn_ref_dem is not None:
@@ -963,7 +1053,7 @@ def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, fil
         print('Processing with ' + str(nproc) + ' cores...')
         # now, try to figure out the nicest way to break up the image, given the number of processors
         # there has to be a better way than this... i'll look into it
-        # TODO: do the tiling with xarray/dask
+        # TODO: do the tiling with xarray/dask, and proper chunksizes
 
         if method in ['ols','wls']:
             #here calculation is done matricially so we want to use all cores with the largest tiles possible
@@ -972,8 +1062,8 @@ def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, fil
             n_y_tiles = opt_n_tiles
         elif method == 'gpr':
             #here calculation is within a for loop: better to have small tiles to get an idea of the processing speed
-            n_x_tiles = np.ceil(ds['x'].shape[0] / 100).astype(int)  # break it into 10x10 tiles
-            n_y_tiles = np.ceil(ds['y'].shape[0] / 100).astype(int)
+            n_x_tiles = np.ceil(ds['x'].shape[0] / 30).astype(int)  # break it into 10x10 tiles
+            n_y_tiles = np.ceil(ds['y'].shape[0] / 30).astype(int)
 
         pool = mp.Pool(nproc, maxtasksperchild=1)
         split_arr = splitter(ds_arr, (n_y_tiles, n_x_tiles))
@@ -994,9 +1084,22 @@ def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, fil
             zip_out = list(zip(*outputs))
 
             out_cube = stitcher(zip_out[0], (n_y_tiles, n_x_tiles))
+
+            #to write back to full extent even if the dataset was subsetted spatially at the top
+            # if inc_mask is not None:
+            #     full_out_cube = np.zeros((np.shape(out_cube)[0],ds_orig.y.size,ds_orig.x.size)) * np.nan
+            #     full_out_cube[slices[0],slices[1]] = out_cube
+            #     out_cube = full_out_cube
+            #     ds=ds_orig
+
             cube_to_stack(ds, out_cube, y0, nice_fit_t, slope_arr=med_slope, outfile=outfile, clobber=clobber)
             if write_filt:
                 filt_cube = stitcher(zip_out[1], (n_y_tiles, n_x_tiles))
+                # if inc_mask is not None:
+                #     full_filt_cube = np.zeros((np.shape(filt_cube)[0], ds_orig.y.size, ds_orig.x.size)) * np.nan
+                #     full_filt_cube[slices[0], slices[1]] = filt_cube
+                #     filt_cube = full_filt_cube
+
                 cube_to_stack(ds, filt_cube, y0, filt_vals, outfile=fn_filt, clobber=clobber, filt_bool=True, ci=False)
 
         elif method in ['ols', 'wls']:
