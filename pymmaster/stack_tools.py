@@ -59,12 +59,13 @@ def corr_filter_aster(fn_dem,fn_corr,threshold=80):
 
     dem = GeoImg(fn_dem)
     corr = GeoImg(fn_corr)
+    out = dem.copy()
     corr.img[corr.img < threshold] = 0
 
     rem_open = binary_opening(corr.img, structure=disk(5))
-    dem.img[~rem_open] = np.nan
+    out.img[~rem_open] = np.nan
 
-    return dem
+    return out
 
 def parse_date(fname, datestr=None, datefmt=None):
     bname = os.path.splitext(os.path.basename(fname))[0]
@@ -483,7 +484,7 @@ def make_geoimg(ds, band=0 ,var='z'):
     sp = dst.SetProjection(ds.crs.spatial_ref)
     sg = dst.SetGeoTransform(newgt)
 
-    img = ds[var][band].values
+    img = np.copy(ds[var][band].values)
     img[np.isnan(img)] = -9999
     wa = dst.GetRasterBand(1).WriteArray(img)
     md = dst.SetMetadata({'Area_or_point': 'Point'})
@@ -737,7 +738,6 @@ def create_mmaster_stack(filelist, extent=None, res=None, epsg=None, outfile='mm
                 uo[outind] = stats['RMSE']
         to[outind] = datelist[ind].toordinal() - dt.date(y0, 1, 1).toordinal()
         go[outind] = os.path.basename(filelist[ind]).rsplit('.tif', 1)[0]
-        zo[outind, :, :] = img.img
         outind += 1
 
         if l1a_zipped and (instru=='AST'):
