@@ -719,7 +719,7 @@ def cube_to_stack(ds, out_cube, y0, nice_fit_t, outfile, slope_arr=None, ci=True
         fill = -9999
     else:
         dt = 'i1'
-        fill = 0
+        fill = False
         fit_cube = np.array(fit_cube,dtype=bool)
 
     zo = nco.createVariable('z', dt, ('time', 'y', 'x'), fill_value=fill)
@@ -792,8 +792,8 @@ def time_filter_ref(ds, t_vals, ref_dem, ref_date, thresh=[-10,3], base_thresh=2
     if np.array(thresh).size == 1:
         ds[np.abs(dh) > base_thresh + np.abs(dt_arr)*thresh] = np.nan
     else:
-        d_data = dh / dt_arr
-        ds[np.logical_and(d_data < - base_thresh / np.abs(dt_arr) + thresh[0], d_data > base_thresh / np.abs(dt_arr) + thresh[1])] = np.nan
+        ds[np.logical_or(np.logical_and(dt_arr < 0, np.logical_or(dh < - base_thresh + dt_arr*thresh[1], dh > base_thresh + dt_arr*thresh[0])),
+                             np.logical_and(dt_arr > 0, np.logical_or(dh > base_thresh + dt_arr*thresh[1], dh < - base_thresh + dt_arr*thresh[0])))] = np.nan
     return ds
 
 @jit_filter_function
@@ -871,7 +871,7 @@ def spat_filter_ref(ds_arr, ref_dem, cutoff_kern_size=500, cutoff_thr=20.,nproc=
 
 def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, filt_ref='min_max', time_filt_thresh=[-30,5],
               inc_mask=None, gla_mask=None, nproc=1, method='gpr', opt_gpr=False, kernel=None, filt_ls=False,
-              conf_filt_ls=0.99, tlim=None, tstep=0.25, outfile='fit.nc', write_filt=False, clobber=False):
+              conf_filt_ls=0.99, tlim=None, tstep=0.25, outfile='fit.nc', write_filt=False, clobber=False, merge_date=False):
     """
     Given a netcdf stack of DEMs, perform temporal fitting with uncertainty propagation
 
@@ -929,27 +929,33 @@ def fit_stack(fn_stack, fit_extent=None, fn_ref_dem=None, ref_dem_date=None, fil
     keep_vals = ds.uncert.values < 20
     ds = ds.isel(time=keep_vals)
 
-    print('Temporal size of stack is now: '+str(ds.time.size))
+    if merge_date:
 
-    print('Merging ASTER DEMs with exact same date...')
+        print('Temporal size of stack is now: ' + str(ds.time.size))
 
-    t_vals = ds.time.values
-    dates_rm_dupli = list(set(list(t_vals)))
-    ind_firstdate = []
-    for i, date in enumerate(dates_rm_dupli):
-        ind_firstdate.append(list(t_vals).index(date))
-    ind_firstdate = sorted(ind_firstdate)
-    ds_filt = ds.isel(time=np.array(ind_firstdate))
-    for i in range(len(dates_rm_dupli)):
-        t_ind = (t_vals == dates_rm_dupli[i])
-        if len(t_ind)>1:
-            #careful, np.nansum gives back zero for an axis full of NaNs
-            mask_nan = np.all(np.isnan(ds.z.values[t_ind,:]),axis=0)
-            ds_filt.z.values[i, :] = np.nansum(ds.z.values[t_ind, :] * 1./ds.uncert.values[t_ind,None,None]**2, axis=0)/np.nansum(1./ds.uncert.values[t_ind,None,None]**2, axis=0)
-            ds_filt.z.values[i, mask_nan] = np.nan
-            ds_filt.uncert.values[i] = np.nansum(ds.uncert.values[t_ind] * 1./ds.uncert.values[t_ind]**2) / np.nansum(1./ds.uncert.values[t_ind]**2)
+        print('Merging ASTER DEMs with exact same date...')
 
-    ds = ds_filt
+        t_vals = ds.time.values
+        dates_rm_dupli = sorted(list(set(list(t_vals))))
+        ind_firstdate = []
+        for i, date in enumerate(dates_rm_dupli):
+            ind_firstdate.append(list(t_vals).index(date))
+        ds_filt = ds.isel(time=np.array(ind_firstdate))
+        for i in range(len(dates_rm_dupli)):
+            t_ind = (t_vals == dates_rm_dupli[i])
+            if len(t_ind)>1:
+                ds_filt.z.values[i,:] = np.nanmean(ds.z.values[t_ind,:],axis=0)
+                ds_filt.uncert.values[i,:] = np.nanmean(ds.uncert.values[t_ind, :])
+
+                #something is wrong when doing weighted mean...
+
+                #careful, np.nansum gives back zero for an axis full of NaNs
+                # mask_nan = np.all(np.isnan(ds.z.values[t_ind,:]),axis=0)
+                # ds_filt.z.values[i, :] = np.nansum(ds.z.values[t_ind, :] * 1./ds.uncert.values[t_ind,None,None]**2, axis=0)/np.nansum(1./ds.uncert.values[t_ind,None,None]**2, axis=0)
+                # ds_filt.z.values[i, mask_nan] = np.nan
+                # ds_filt.uncert.values[i] = np.nansum(ds.uncert.values[t_ind] * 1./ds.uncert.values[t_ind]**2) / np.nansum(1./ds.uncert.values[t_ind]**2)
+
+        ds = ds_filt
 
     print('Final temporal size of stack is '+str(ds.time.size))
 
