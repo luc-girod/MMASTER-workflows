@@ -9,8 +9,11 @@ import numpy as np
 import pymmaster.fit_tools as ft
 import math as m
 import pandas as pd
+from scipy import integrate
 from datetime import datetime
+import functools
 
+#mix of methods from my own libs, we'll sort later
 
 # AST L1A METHODS
 def extract_odl_astL1A(fn):
@@ -243,15 +246,15 @@ def poly_utm_latlontile(tile_name, utm_zone):
     return poly
 
 
-#create a regularly spaced extent in a utm zone, with 1 overlapping pixel on the edges for reprojections
+#create a regularly spaced extent in a utm zone, with 3 overlapping pixel on the edges for reprojections
 def niceextent_utm_latlontile(tile_name, utm_zone, gsd):
     poly = poly_utm_latlontile(tile_name,utm_zone)
     xmin, ymin, xmax, ymax = extent_from_poly(poly)
 
-    xmin = xmin - xmin % gsd - gsd
-    ymin = ymin - ymin % gsd - gsd
-    xmax = xmax - xmax % gsd + gsd
-    ymax = ymax - ymax % gsd + gsd
+    xmin = xmin - xmin % gsd - 3*gsd
+    ymin = ymin - ymin % gsd - 3*gsd
+    xmax = xmax - xmax % gsd + 3*gsd
+    ymax = ymax - ymax % gsd + 3*gsd
 
     return xmin, ymin, xmax, ymax
 
@@ -293,7 +296,7 @@ def poly_from_coords(list_coord):
     # creating granule polygon
     ring = ogr.Geometry(ogr.wkbLinearRing)
     for coord in list_coord:
-        ring.AddPoint(coord[0], coord[1])
+        ring.AddPoint(float(coord[0]), float(coord[1]))
 
     poly = ogr.Geometry(ogr.wkbPolygon)
     poly.AddGeometry(ring)
@@ -386,9 +389,9 @@ def list_shp_field_inters_extent(fn_shp, field_name, extent, proj_ext):
     list_field_inters = []
     for feat in layer:
         feat_geom = feat.GetGeometryRef()
-        inters = feat_geom.Intersection(poly)
+        # inters = feat_geom.Intersection(poly)
 
-        if not inters.IsEmpty():
+        if feat_geom.Intersect(poly):
             list_field_inters.append(feat.GetField(field_name))
 
     return list_field_inters
@@ -471,7 +474,12 @@ def kernel_gaussian(xi, x0, a1):
     return np.exp(-((xi - x0) / a1) ** 2)
 
 
-# TODO: kernel spherical?
+def kernel_sph(xi,x0,a1):
+    if np.abs(xi - x0) > a1:
+        return 0
+    else:
+        return 1 - 3 / 2 * np.abs(xi-x0) / a1 + 1 / 2 * (np.abs(xi-x0) / a1) ** 3
+
 
 def lowess_homemade_kern(x, y, w, a1, kernel='Exp'):
     """
@@ -552,7 +560,7 @@ def interp_linear(xp, yp, errp, acc_y, loo=False):
         # err0_out = np.sqrt(errp[idx_1]**2 + errp[idx_2]**2)
 
         # estimating linear error
-        delta_x = max(np.absolute(xp[idx_2] - x0), np.absolute(xp[idx_1] - x0))
+        delta_x = min(np.absolute(xp[idx_2] - x0), np.absolute(xp[idx_1] - x0))
         errlin0_out = linear_err(delta_x, acc_y)
 
         # appending
@@ -590,7 +598,108 @@ def interp_lowess(xp, yp, errp, acc_y, rang, kernel='Exc'):
     return yp_out, errp_out, errlin_out
 
 
-def double_sum_covar(tot_err, slope_bin, elev_bin, area_tot, rang):
+def neff_sphsum_circular(area,crange1,psill1,crange2,psill2):
+
+    #short range variogram
+    c1 = psill1 # partial sill
+    a1 = crange1  # short correlation range
+
+    #long range variogram
+    c1_2 = psill2
+    a1_2 = crange2 # long correlation range
+
+    h_equiv = np.sqrt(area / np.pi)
+
+    #hypothesis of a circular shape to integrate variogram model
+    if h_equiv > a1_2:
+        std_err = np.sqrt(c1 * a1 ** 2 / (5 * h_equiv ** 2) + c1_2 * a1_2 ** 2 / (5 * h_equiv ** 2))
+    elif (h_equiv < a1_2) and (h_equiv > a1):
+        std_err = np.sqrt(c1 * a1 ** 2 / (5 * h_equiv ** 2) + c1_2 * (1-h_equiv / a1_2+1 / 5 * (h_equiv / a1_2) ** 3))
+    else:
+        std_err = np.sqrt(c1 * (1-h_equiv / a1+1 / 5 * (h_equiv / a1) ** 3) + c1_2 * (1-h_equiv / a1_2+1 / 5 * (h_equiv / a1_2) ** 3))
+
+    return (psill1 + psill2)/std_err**2
+
+def neff_circ(area,list_vgm):
+
+    psill_tot = 0
+    for vario in list_vgm:
+        psill_tot += vario[2]
+
+    def hcov_sum(h):
+        fn = 0
+        for vario in list_vgm:
+            crange, model, psill = vario
+            fn += h*(cov(h,crange,model=model,psill=psill))
+
+        return fn
+
+    h_equiv = np.sqrt(area / np.pi)
+
+    full_int = integrate_fun(hcov_sum,0,h_equiv)[0]
+    std_err = np.sqrt(2*np.pi*full_int / area)
+
+    return psill_tot/std_err**2
+
+
+def neff_rect(area,width,crange1,psill1,model1='Sph',crange2=None,psill2=None,model2=None):
+
+    def hcov_sum(h,crange1=crange1,psill1=psill1,model1=model1,crange2=crange2,psill2=psill2,model2=model2):
+
+        if crange2 is None or psill2 is None or model2 is None:
+            return h*(cov(h,crange1,model=model1,psill=psill1))
+        else:
+            return h*(cov(h,crange1,model=model1,psill=psill1)+cov(h,crange2,model=model2,psill=psill2))
+
+    width = min(width,area/width)
+
+    full_int = integrate_fun(hcov_sum,0,width/2)[0]
+    bin_int = np.linspace(width/2,area/width,100)
+    for i in range(len(bin_int)-1):
+        low = bin_int[i]
+        upp = bin_int[i+1]
+        mid = bin_int[i] + (bin_int[i+1]- bin_int[i])/2
+        piec_int = integrate_fun(hcov_sum, low, upp)[0]
+        full_int += piec_int * 2/np.pi*np.arctan(width/(2*mid))
+
+    std_err = np.sqrt(2*np.pi*full_int / area)
+
+    if crange2 is None or psill2 is None or model2 is None:
+        return psill1 / std_err ** 2
+    else:
+        return (psill1 + psill2) / std_err ** 2
+
+
+def integrate_fun(fun,low_limit,up_limit):
+
+    return integrate.quad(fun,low_limit,up_limit)
+
+def cov(h,crange,model='Sph',psill=1.,kappa=1/2,nugget=0):
+
+    return (nugget + psill) - vgm(h,crange,model=model,psill=psill,kappa=kappa)
+
+def vgm(h,crange,model='Sph',psill=1.,kappa=1/2,nugget=0):
+
+    c0 = nugget #nugget
+    c1 = psill #partial sill
+    a1 = crange #correlation range
+    s = kappa #smoothness parameter for Matern class
+
+    if model == 'Sph':  # spherical model
+        if h < a1:
+            vgm = c0 + c1 * (3 / 2 * h / a1-1 / 2 * (h / a1) ** 3)
+        else:
+            vgm = c0 + c1
+    elif model == 'Exp':  # exponential model
+        vgm = c0 + c1 * (1-np.exp(-h / a1))
+    elif model == 'Gau':  # gaussian model
+        vgm = c0 + c1 * (1-np.exp(- (h / a1) ** 2))
+    elif model == 'Exc':  # stable exponential model
+        vgm = c0 + c1 * (1-np.exp(-(h/ a1)**s))
+
+    return vgm
+
+def double_sum_covar(tot_err, slope_bin, elev_bin, area_tot, crange, kernel):
     n = len(tot_err)
 
     dist_bin = np.zeros(n)
@@ -603,21 +712,49 @@ def double_sum_covar(tot_err, slope_bin, elev_bin, area_tot, rang):
 
         dist_bin[i + 1] = np.nansum(bin_size / np.tan(tmpslope * np.pi / 180.))
 
-    std_err = 0
+    var_err = 0
     for i in range(n):
         for j in range(n):
-            std_err += kernel_exp(dist_bin[i], dist_bin[j], rang) * tot_err[i] * tot_err[j] * area_tot[i] * area_tot[j]
+            var_err += kernel(dist_bin[i], dist_bin[j], crange) * tot_err[i] * tot_err[j] * area_tot[i] * area_tot[j]
 
-    std_err /= np.nansum(area_tot) ** 2
+    var_err /= np.nansum(area_tot) ** 2
 
-    return np.sqrt(std_err)
+    return np.sqrt(var_err)
 
 
-def hypso_dc(dh_dc, err_dc, ref_elev, tvals, mask, gsd, bin_type='fixed', bin_val=50., filt_bin='3NMAD', method='linear'):
+def hypso_dc(dh_dc, err_dc, ref_elev, dt, tvals, mask, gsd, slope=None, bin_type='fixed', bin_val=100., filt_bin='3NMAD', method='linear'):
 
-    # elevation binning
+    valid_points = np.count_nonzero(np.logical_and(np.logical_and(~np.isnan(ref_elev),~np.isnan(dh_dc[0,:])),mask))
+
+    #closest observation binning: monthly
+    dt_bin = np.arange(0,np.nanmax(np.abs(dt))+30,5)
+    nb_dt_bin = len(dt_bin)-1
+
+    #amplitude of correlation length, calibrated with ICESat global
+    corr_ranges = [500,5000,50000]
+    corr_a = [25,35,35]
+    corr_b = [0.2,0.02,0.0002]
+    corr_c = [0.25,0.5,0.85]
+    def sill_frac(t,a,b,c):
+        return a*(1 - np.exp(-b*t**c))
+    corr_std_dt = [functools.partial(sill_frac,a=corr_a[i],b=corr_b[i],c=corr_c[i]) for i in range(len(corr_ranges))]
+
+    if valid_points == 0:
+        df = pd.DataFrame()
+        df = df.assign(hypso=np.nan, time=np.nan, dh=np.nan, err_dh=np.nan)
+        df_hyp = pd.DataFrame()
+        df_hyp = df_hyp.assign(hypso=np.nan, area_meas=np.nan, area_tot=np.nan, nmad=np.nan)
+        df_int = pd.DataFrame()
+        df_int = df_int.assign(time=tvals, dh=np.nan, err_dh=np.nan, area=np.nan)
+
+        return df, df_hyp, df_int
+
+    #elevation binning
     min_elev = np.nanmin(ref_elev[mask]) - (np.nanmin(ref_elev[mask]) % bin_val)
-    max_elev = np.nanmax(ref_elev[mask]) + 1
+    max_elev = np.nanmax(ref_elev[mask])
+
+    if max_elev == min_elev:
+        max_elev = min_elev + 0.00001
     if bin_type == 'fixed':
         bin_final = bin_val
     elif bin_type == 'percentage':
@@ -627,16 +764,18 @@ def hypso_dc(dh_dc, err_dc, ref_elev, tvals, mask, gsd, bin_type='fixed', bin_va
     bins_on_mask = np.arange(min_elev, max_elev, bin_final)
     nb_bin = len(bins_on_mask)
 
-    # index only glacier pixels
+    #index only glacier pixels
     ref_on_mask = ref_elev[mask]
     dh_on_mask = dh_dc[:, mask]
     err_on_mask = err_dc[:, mask]
+    dt_on_mask=dt[:,mask]
 
-    # local hypsometric method (McNabb et al., 2019)
+    #local hypsometric method (McNabb et al., 2019)
 
     #preallocating
-    elev_bin, slope_bin, area_tot_bin, area_meas_bin, nmad_bin = (np.zeros(nb_bin) * np.nan for i in range(5))
-    mean_bin, std_bin, ss_err_bin = (np.zeros((nb_bin, np.shape(dh_dc)[0])) * np.nan for i in range(3))
+    elev_bin, slope_bin, area_tot_bin, area_meas_bin, nmad_bin, std_geo_err = (np.zeros(nb_bin) * np.nan for i in range(6))
+    mean_bin, std_bin, ss_err_bin, std_num_err, std_all_err = (np.zeros((nb_bin, np.shape(dh_dc)[0])) * np.nan for i in range(5))
+    final_num_err_corr = np.zeros((np.shape(dh_dc)[0],len(corr_ranges)+1))*np.nan
 
     for i in np.arange(nb_bin):
 
@@ -647,7 +786,10 @@ def hypso_dc(dh_dc, err_dc, ref_elev, tvals, mask, gsd, bin_type='fixed', bin_va
         area_tot_bin[i] = np.count_nonzero(idx_orig) * gsd ** 2
         area_meas_bin[i] = np.count_nonzero(idx_bin) * gsd ** 2
         elev_bin[i] = bins_on_mask[i] + bin_final / 2.
-        # slope_bin[i] = np.nanmedian(slope[idx_orig])
+        if slope is None:
+            slope_bin[i] = 30. #average slope
+        else:
+            slope_bin[i] = np.nanmean(slope[idx_orig])
 
         dh_bin = dh_on_mask[:, idx_bin]
         err_bin = err_on_mask[:, idx_bin]
@@ -657,7 +799,7 @@ def hypso_dc(dh_dc, err_dc, ref_elev, tvals, mask, gsd, bin_type='fixed', bin_va
 
         if nvalid > 0:
 
-            if filt_bin == '3NMAD':
+            if filt_bin == '3NMAD' and nvalid > 10:
 
                 # this is for a temporally varying NMAD, which doesn't seem to always be relevant...
                 # need to change preallocation if using this one
@@ -690,18 +832,154 @@ def hypso_dc(dh_dc, err_dc, ref_elev, tvals, mask, gsd, bin_type='fixed', bin_va
 
             # ref_elev_out[idx_orig & np.isnan(ref_elev_out)] = mean_bin[i]
 
-    final_mean = mean_bin
-    final_err = ss_err_bin
+    area_tot = np.nansum(area_tot_bin)
+    area_meas = np.nansum(area_meas_bin)
 
+    idx_nonvoid = area_meas_bin > 0
+
+    #what kind of signal are we missing? this is dependent on the hypsometric elevation change correlation
+    # over void areas, i.e. the size of the whole glacier
+    crange_geo = 10**(2.+area_tot/10**6/2.5) #in meters, this is a decent empirical approximation of exponential hypsometric correlation length based on area size
+
+    # what is the typical std of glacier elevation change: proportional to dh
+    psill_bin = std_bin[:, -1]
+    # psill_bin = mean_bin[:, -1]
+
+    for i in range(len(area_tot_bin)):
+        if idx_nonvoid[i]:
+            Neff_geo = neff_rect(area_tot_bin[i],bin_final/(np.tan(slope_bin[i]*np.pi/180.)),crange_geo,psill_bin[i],model1='Exp')
+            neff_geo = neff_rect(area_meas_bin[i],bin_final/(np.tan(slope_bin[i]*np.pi/180.)),crange_geo,psill_bin[i],model1='Exp')
+            std_geo_err[i] = std_err_finite(psill_bin[i],Neff_geo,neff_geo)
+        else:
+            std_geo_err[i] = np.nan
+
+    #what is our numerical error
+    crange_num1 = 100 #ASTER base correlation length
+    psill_num1 = 4**2 #ASTER base variance
+    crange_num2 = 1500 #ASTER jitter correlation length
+    psill_num2 = 0.6**2 #ASTER jitter has a mean amplitude of ~2m, let's say we corrected or filtered about 70%
+
+    # first, get standard error for all non-void bins
+    for i in range(len(area_tot_bin)):
+        if idx_nonvoid[i]:
+            neff = neff_rect(area_meas_bin[i],bin_final/(np.tan(slope_bin[i]*np.pi/180.)),crange1=crange_num1,psill1=psill_num1
+                             ,model1='Sph',crange2=crange_num2,psill2=psill_num2,model2='Sph')
+            std_num_err[i,:] = std_err(ss_err_bin[i,:], neff)
+        else:
+            std_num_err[i,:] = np.nan
+
+    std_num_err[np.isnan(std_num_err)] = 0
+    std_geo_err[np.isnan(std_geo_err)] = 0
+
+    std_all_err[idx_nonvoid] = np.sqrt(std_num_err[idx_nonvoid] ** 2 + std_geo_err[idx_nonvoid,None] ** 2)
+
+    # if method == 'linear':
+
+        # # first, do a leave-one out linear interpolation to remove non-void bins with really low confidence
+        # loo_mean, loo_std_err, loo_lin_err = interp_linear(elev_bin, mean_bin, std_all_err, acc_dh, loo=True)
+        # loo_full_err = np.sqrt(loo_std_err ** 2 + loo_lin_err ** 2)
+        #
+        # idx_low_conf = nonvoid_err_bin > loo_full_err
+        #
+        # idx_final_void = np.logical_and(np.invert(idx_nonvoid), idx_low_conf)
+
+        # then, interpolate for all of those bins
+        # mean_bin[idx_final_void] = np.nan
+        # nonvoid_err_bin[idx_final_void] = np.nan
+
+        # final_std_err[~idx_final_void] = 0
+
+    #linear interpolation of voids by temporal step
+    # #TODO: optimize that temporally later
+
+    final_mean_hyp, final_err_hyp = (np.zeros(np.shape(mean_bin))*np.nan for i in range(2))
+    final_mean, final_err = (np.zeros(np.shape(mean_bin)[1])*np.nan for i in range(2))
+
+    # without taking into account large scale spatial correlation
+    # neff_num_tot = neff_circ(area_meas,crange1=crange_num1,psill1=psill_num1
+    #                          ,model1='Sph',crange2=crange_num2,psill2=psill_num2,model2='Sph')
+
+    intrabin_err = std_geo_err
+    intrabin_err[np.isnan(intrabin_err)] = 0
+    if nb_bin>1:
+        final_geo_err = double_sum_covar(intrabin_err, slope_bin, elev_bin, area_tot_bin, crange_geo, kernel=kernel_exp)
+    else:
+        final_geo_err = intrabin_err[0]
+    for i in range(np.shape(mean_bin)[1]):
+        if nb_bin>1:
+            tmp_mean, tmp_std_err, tmp_lin_err = interp_linear(elev_bin, mean_bin[:,i], std_all_err[:,i], acc_y=.002, loo=False)
+        else:
+            tmp_mean = np.array([mean_bin[0,i]])
+            tmp_std_err = np.array([std_all_err[0,i]])
+            tmp_lin_err = np.array([0])
+
+        tmp_std_err[np.isnan(tmp_std_err)] = 0
+        tmp_lin_err[np.isnan(tmp_lin_err)] = 0
+        interbin_err = np.sqrt(tmp_std_err ** 2 + tmp_lin_err ** 2)
+        tmp_tot_err = np.sqrt(interbin_err ** 2 + intrabin_err ** 2)
+
+        final_mean_hyp[:, i] = tmp_mean
+        final_err_hyp[:, i] = tmp_tot_err
+
+        # integrate along hypsometry
+        final_mean[i] = np.nansum(tmp_mean * area_tot_bin)/area_tot
+
+        #without taking account a very large spatial correlation at the regional scale, only one error:
+        # final_num_err = std_err(np.nansum(ss_err_bin[:,i]*area_meas_bin)/area_meas,neff_num_tot)
+
+
+        nsamp_dt = np.zeros(nb_dt_bin)*np.nan
+        err_corr = np.zeros((nb_dt_bin,len(corr_ranges)+1)) * np.nan
+
+        for j in np.arange(nb_dt_bin):
+
+            idx_dt_bin= np.logical_and(np.abs(dt_on_mask[i,:]) >= dt_bin[j],np.abs(dt_on_mask[i,:])<dt_bin[j+1])
+
+            err_dt = err_on_mask[i,idx_dt_bin]
+
+            final_num_err_dt=np.sqrt(np.nanmean(err_dt**2))
+            nsamp_dt[j] = np.count_nonzero(idx_dt_bin)
+
+            sum_var = 0
+            for k in range(len(corr_ranges)+1):
+
+                if k != len(corr_ranges):
+                    err_corr[j, k] = np.sqrt(max(0,corr_std_dt[len(corr_ranges)-1-k](dt_bin[j] + (dt_bin[j + 1] - dt_bin[j]) / 2) - sum_var))
+                    sum_var += err_corr[j, k] ** 2
+                else:
+                    err_corr[j, k]=np.sqrt(max(0,final_num_err_dt**2-sum_var))
+
+
+        for k in range(len(corr_ranges)+1):
+            final_num_err_corr[i,k] = np.sqrt(np.nansum(err_corr[:,k]*nsamp_dt)/np.nansum(nsamp_dt))
+
+        list_vgm = [(corr_ranges[0],'Sph',final_num_err_corr[i,3]**2),(corr_ranges[1],'Sph',final_num_err_corr[i,2]**2),
+                    (corr_ranges[2],'Sph',final_num_err_corr[i,1]**2),(500000,'Sph',final_num_err_corr[i,0]**2)]
+        neff_num_tot = neff_circ(area_meas,list_vgm)
+
+        final_num_err = std_err(np.nansum(final_num_err_corr[i,:]),neff_num_tot)
+
+        final_err[i] = np.sqrt(final_num_err**2+final_geo_err**2)
+
+    mean_dt = np.nanmean(np.abs(dt_on_mask),axis=1)
+
+    #prepare index to write results
     hypso_index = np.array([h for h in elev_bin for t in tvals])
     time_index = np.array([t for h in elev_bin for t in tvals])
+
     #dataframe with hypsometric mean and error for all time steps
     df = pd.DataFrame()
-    df = df.assign(hypso=hypso_index, time=time_index, dh=final_mean.flatten(), err_dh=final_err.flatten())
+    df = df.assign(hypso=hypso_index, time=time_index, dh=final_mean_hyp.flatten(), err_dh=final_err_hyp.flatten())
 
     #dataframe with hypsometric data
     df_hyp = pd.DataFrame()
     df_hyp = df_hyp.assign(hypso=elev_bin,area_meas=area_meas_bin,area_tot=area_tot_bin,nmad=nmad_bin)
+
+    #dataframe with spatially integrated volume for all time steps
+    df_int = pd.DataFrame()
+    df_int = df_int.assign(time=tvals,dh=final_mean,err_dh=final_err,area=np.repeat(area_tot,len(tvals))
+                           ,sill_corr05=final_num_err_corr[:,3],sill_corr5=final_num_err_corr[:,2],
+                           sill_corr50=final_num_err_corr[:,1], sill_corr500=final_num_err_corr[:,0],dt=mean_dt)
 
     # for i in np.arange(nb_bin):
     #     idx_orig = np.array(ref_elev >= bins_on_mask[i]) & np.array(
@@ -711,4 +989,4 @@ def hypso_dc(dh_dc, err_dc, ref_elev, tvals, mask, gsd, bin_type='fixed', bin_va
 
     # return df, dc_out
 
-    return df, df_hyp
+    return df, df_hyp, df_int
