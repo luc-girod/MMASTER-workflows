@@ -1,5 +1,6 @@
+#!/bin/bash
 #export PATH=$PATH:/mn/moulin/project/Software/culture3d/bin
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib64/cmake
+#export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib64/cmake
 
 echo $1
 echo $2
