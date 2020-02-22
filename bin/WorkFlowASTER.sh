@@ -1,6 +1,6 @@
 #!/bin/bash
-# Put all the L1A zip files in a folder 'AST_L1A_MyStrip', then, from the folder above, call something like: 
-# WorkFlowASTER_onestrip.sh -s AST_L1A_MyStrip -z "4 +north"
+# Put all the L1A zip files in a folder 'AST_L1A_...', then, from the folder above, call something like: 
+# WorkFlowASTER.sh -s AST_L1A_MyStrip -z "4 +north"
 # extra options :  -t 30 -n false -c 0.7 -w false -f 1
 
 #Fixed symboles
@@ -154,7 +154,7 @@ mm3d SateLib Aster2Grid $name$Bx 20 "$proj" HMin=-500 HMax=9000 expDIMAP=1 expGr
 mm3d SateLib Aster2Grid $name$Nx 20 "$proj" HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
 mm3d SateLib Aster2Grid "FalseColor_$name.xml" 20 "$proj" HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
 
-mm3d Malt Ortho ".*$name(|_3N|_3B).tif" GRIBin ImMNT="$name(_3N|_3B).tif" MOri=GRID ZMoy=2500 ZInc=2500 ZoomF=8 ZoomI=32 ResolTerrain=30 NbVI=2 EZA=1 Regul=0.1 DefCor=$CorThr DoOrtho=0 DirMEC=MEC-Mini
+mm3d Malt Ortho ".*$name(_3N|_3B).tif" GRIBin ImMNT="$name(_3N|_3B).tif" MOri=GRID ZMoy=2500 ZInc=2500 ZoomF=8 ZoomI=32 ResolTerrain=30 NbVI=2 EZA=1 Regul=0.1 DefCor=$CorThr DoOrtho=0 DirMEC=MEC-Mini
 
 gdalinfo -nomd -norat -noct -nofl -stats MEC-Mini/Z_Num6_DeZoom8_STD-MALT.tif > gdalinfo.txt
 deminfo=$(grep -P 'Minimum+' gdalinfo.txt)
