@@ -29,7 +29,7 @@ while getopts "s:z:o:c:q:wnf:t:y:ai:h" opt; do
   case $opt in
     h)
       echo "Run the second step in the MMASTER processing chain."
-      echo "usage: WorkFlowASTER.sh -s SCENENAME -z 'UTMZONE' -f ZOOMF -t RESTERR -w false -h"
+      echo "basic usage: WorkFlowASTER.sh -s SCENENAME -z 'UTMZONE' -f ZOOMF -t RESTERR -w MASK -a"
       echo "    -s SCENENAME   : Folder where zips of stips are located."
       echo "    -z UTMZONE     : UTM Zone of area of interest. Takes form 'NN +north(south)'. One of -z or -o must be set."
       echo "    -o PolarStereo : Use polar stereo (option N for north EPSG:3411 or S for south EPSG:3412)"
