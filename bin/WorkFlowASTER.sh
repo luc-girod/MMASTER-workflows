@@ -1,3 +1,4 @@
+#!/bin/bash
 # Put all the L1A zip files in a folder 'AST_L1A_MyStrip', then, from the folder above, call something like: 
 # WorkFlowASTER_onestrip.sh -s AST_L1A_MyStrip -z "4 +north"
 # extra options :  -t 30 -n false -c 0.7 -w false -f 1
@@ -28,9 +29,9 @@ while getopts "s:z:o:c:q:wnf:t:y:ai:h" opt; do
   case $opt in
     h)
       echo "Run the second step in the MMASTER processing chain."
-      echo "usage: WorkFlowASTER_onestrip.sh -s SCENENAME -z 'UTMZONE' -f ZOOMF -t RESTERR -w false -h"
+      echo "usage: WorkFlowASTER.sh -s SCENENAME -z 'UTMZONE' -f ZOOMF -t RESTERR -w false -h"
       echo "    -s SCENENAME   : Folder where zips of stips are located."
-      echo "    -z UTMZONE     : UTM Zone of area of interest. Takes form 'NN +north(south)'"
+      echo "    -z UTMZONE     : UTM Zone of area of interest. Takes form 'NN +north(south)'. One of -z or -o must be set."
       echo "    -o PolarStereo : Use polar stereo (option N for north EPSG:3411 or S for south EPSG:3412)"
       echo "    -c CorThr      : Correlation Threshold for estimates of Z min and max (optional, default : 0.7)"
       echo "    -q SzW         : Size of the correlation window in the last step (optional, default : 4, mean 9*9)"
@@ -40,7 +41,7 @@ while getopts "s:z:o:c:q:wnf:t:y:ai:h" opt; do
       echo "    -t RESTERR     : Run with different terrain resolution (optional; default: 30)"
       echo "    -y do_ply      : Write point cloud (DEM drapped with ortho in ply)"
       echo "    -a do_angle    : Compute track angle along orbit"
-      echo "    -i fitVersion  : Version of Cross-track FitASTER to be used (Def 2, 1 availiable)"
+      echo "    -i fitVersion  : Version of Cross-track FitASTER to be used (default 2, 1 availiable)"
       echo "    -h             : displays this message and exits."
       echo " "
       exit 0
@@ -95,18 +96,18 @@ while getopts "s:z:o:c:q:wnf:t:y:ai:h" opt; do
       RESTERR=$OPTARG
       ;;
     \?)
-      echo "RunMicMacAster.sh: Invalid option: -$OPTARG" >&2
+      echo "WorkFlowASTER.sh: Invalid option: -$OPTARG" >&2
       exit 1
       ;;
     :)
-      echo "RunMicMacAster.sh: Option -$OPTARG requires an argument." >&2
+      echo "WorkFlowASTER.sh: Option -$OPTARG requires an argument." >&2
       exit 1
       ;;
   esac
 done
 
 if [ "$proj_set" = "0" ]; then
-  echo "RunMicMacAster.sh: projection must be set using either -z or -o flags." >&2
+  echo "WorkFlowASTER.sh: projection must be set using either -z or -o flags." >&2
   exit 1
 fi
 
@@ -164,15 +165,15 @@ echo Min=$Min
 echo Max=$Max
 
 #Filter obvious error in min/max (limit to earth min/max)
-Min=$((($Min)<-420 ? -420 : $Min))
-Max=$((($Max)>8850 ? 8850 : $Max))
+if [ $Min -lt -420 ]; then Min=-420; fi # changed from Min=$((($Min)<-420 ? -420 : $Min)) because it breaks on some bash versions
+if [ $Max -gt 8850 ]; then Max=8850; fi
 #next 2 lines is basically if the auto min/max function failed / DEM is really bad, happen if a lot of sea or a lot of clouds
-Min=$((($Min)>8850 ? -420 : $Min))
-Max=$((($Max)<-420 ? 8850 : $Max))
+if [ $Min -gt 8850 ]; then Min=-420; fi
+if [ $Max -lt -420 ]; then Max=8850; fi
 #From min/max, compute the nb of grids needed in Z and the values for ZMoy and Zinc
 DE=$(echo $Max - $Min| bc )
 NbLvl=$(echo $DE/200| bc )
-NbLvl=$((($NbLvl)<10 ? 10 : $NbLvl))
+if [ $NbLvl -lt 10 ]; then NbLvl=10; fi
 Mean=$(echo $Max + $Min| bc )
 Mean=$(echo $Mean/2| bc )
 Inc=$(echo $Max - $Mean| bc | xargs printf "%.0f")
@@ -193,7 +194,7 @@ mm3d MMTestOrient $name$Bt $name$Nt GRIBin PB=1 MOri=GRID ZoomF=1 ZInc=$Inc ZMoy
 
 # if we want to compute the uncorrected DEM
 if [ "$NoCorDEM" = true ]; then #check variable name!
-mm3d Malt Ortho ".*$name(|_3N|_3B).tif" GRIBin ImMNT="$name(_3N|_3B).tif" ImOrtho="FalseColor_$name.tif" MOri=GRID ZInc=$Inc ZMoy=$Mean ZoomF=1 ZoomI=32 ResolTerrain=30 NbVI=2 EZA=1 DefCor=0 Regul=0.1 ResolOrtho=2 DirMEC=MEC-NoCor
+mm3d Malt Ortho ".*$name(_3N|_3B).tif" GRIBin ImMNT="$name(_3N|_3B).tif" ImOrtho="FalseColor_$name.tif" MOri=GRID ZInc=$Inc ZMoy=$Mean ZoomF=1 ZoomI=32 ResolTerrain=30 NbVI=2 EZA=1 DefCor=0 Regul=0.1 ResolOrtho=2 DirMEC=MEC-NoCor
 fi
 
 #Applying correction to the 3B image
@@ -209,8 +210,8 @@ fi
 
 # Correlation with corrected image
 #mm3d Malt Ortho ".*$name(|_3N|_3B).tif" GRIBin ImMNT="$name(_3N|_3B).tif" ImOrtho="FalseColor_$name.tif" MOri=GRID ZInc=$Inc ZMoy=$Mean ZoomF=$ZoomF ZoomI=32 ResolTerrain=$RESTERR NbVI=2 EZA=1 DefCor=0 Regul=0.1 ResolOrtho=2 SzW=$SzW ZPas=0.1
-
-mm3d Malt Ortho ".*$name(|_3N|_3B).tif" GRIBin ImMNT="$name(_3N|_3B).tif" ImOrtho="FalseColor_$name.tif" MOri=GRID ZInc=$Inc ZMoy=$Mean ZoomF=$ZoomF ZoomI=32 ResolTerrain=10 NbVI=2 EZA=1 DefCor=0 Regul=0.1 ResolOrtho=1  SzW=$SzW
+# do we need to add something for a water mask above?
+mm3d Malt Ortho ".*$name(_3N|_3B).tif" GRIBin ImMNT="$name(_3N|_3B).tif" ImOrtho="FalseColor_$name.tif" MOri=GRID ZInc=$Inc ZMoy=$Mean ZoomF=$ZoomF ZoomI=32 ResolTerrain=10 NbVI=2 EZA=1 DefCor=0 Regul=0.1 ResolOrtho=1  SzW=$SzW
 mm3d Tawny Ortho-MEC-Malt/ RadiomEgal=0
 
 if [ "$do_ply" = true ]; then
