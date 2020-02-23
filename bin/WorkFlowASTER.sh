@@ -157,7 +157,7 @@ mm3d SateLib Aster2Grid "FalseColor_$name.xml" 20 "$proj" HMin=-500 HMax=9000 ex
 mm3d Malt Ortho ".*$name(_3N|_3B).tif" GRIBin ImMNT="$name(_3N|_3B).tif" MOri=GRID ZMoy=2500 ZInc=2500 ZoomF=8 ZoomI=32 ResolTerrain=30 NbVI=2 EZA=1 Regul=0.1 DefCor=$CorThr DoOrtho=0 DirMEC=MEC-Mini
 
 gdalinfo -nomd -norat -noct -nofl -stats MEC-Mini/Z_Num6_DeZoom8_STD-MALT.tif > gdalinfo.txt
-deminfo=$(grep -P 'Minimum+' gdalinfo.txt)
+deminfo=$(grep 'Minimum' gdalinfo.txt)
 Min=$(echo $deminfo | cut -d, -f1 | tr -d ' ' | tr -d 'Minimum=' | xargs printf "%.0f")
 Max=$(echo $deminfo | cut -d, -f2 | tr -d ' ' | tr -d 'Maximum=' | xargs printf "%.0f")
 
