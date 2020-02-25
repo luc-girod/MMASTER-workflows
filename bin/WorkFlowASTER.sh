@@ -165,15 +165,15 @@ echo Min=$Min
 echo Max=$Max
 
 #Filter obvious error in min/max (limit to earth min/max)
-Min=$((($Min) -lt -420 ? -420 : $Min)) # changed from Min=$((($Min)<-420 ? -420 : $Min)) because it breaks on Mac OS
-Max=$((($Max) -gt 8850 ? 8850 : $Max))
+if [ $Min -lt -420 ]; then Min=-420; fi # changed from Min=$((($Min)<-420 ? -420 : $Min)) because it breaks on Mac OS
+if [ $Max -gt 8850 ]; then Max=8850; fi
 #next 2 lines is basically if the auto min/max function failed / DEM is really bad, happen if a lot of sea or a lot of clouds
-Min=$((($Min) -gt 8850 ? -420 : $Min))
-Max=$((($Max) -lt -420 ? 8850 : $Max))
+if [ $Min -gt 8850 ]; then Min=-420; fi
+if [ $Max -lt -420 ]; then Max=8850; fi
 #From min/max, compute the nb of grids needed in Z and the values for ZMoy and Zinc
 DE=$(echo $Max - $Min| bc )
 NbLvl=$(echo $DE/200| bc )
-NbLvl=$((($NbLvl) -lt 10 ? 10 : $NbLvl))
+if [ $NbLvl -lt 10 ]; then NbLvl=10; fi
 Mean=$(echo $Max + $Min| bc )
 Mean=$(echo $Mean/2| bc )
 Inc=$(echo $Max - $Mean| bc | xargs printf "%.0f")
