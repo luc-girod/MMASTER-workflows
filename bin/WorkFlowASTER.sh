@@ -231,7 +231,7 @@ if [ -f AutoMask_STD-MALT_Num_8_Tile_0_0.tif ]; then
 fi
 mv AutoMask_STD-MALT_Num_8.tif AutoMask_STD-MALT_Num_8_FullRes.tif
 cp Z_Num9_DeZoom1_STD-MALT.tfw AutoMask_STD-MALT_Num_8_FullRes.tfw
-gdal_translate -tr $RESTERR $RESTERR -r cubicspline -a_srs "$proj" AutoMask_STD-MALT_Num_8_FullRes.tif AutoMask_STD-MALT_Num_8.tif
+gdal_translate -tr $RESTERR $RESTERR -a_srs "$proj" AutoMask_STD-MALT_Num_8_FullRes.tif AutoMask_STD-MALT_Num_8.tif
 
 if [ -f Z_Num9_DeZoom1_STD-MALT_Tile_0_0.tif ]; then
 	mosaic_micmac_tiles.py -filename 'Z_Num9_DeZoom1_STD-MALT' 
