@@ -59,7 +59,7 @@ if [ $sub_set -eq 0 ]; then
     subList=$(ls -d AST_*/);
 fi
     
-resize_rasters () {
+resize_rasters() {
     image1=$1
     image2=$2
     # first, get the raster sizes and check that they're the same
@@ -80,6 +80,12 @@ resize_rasters () {
     echo "Re-sizing $image2 to agree with $image1 size."
     gdalwarp -te ${ul_arr[0]} ${lr_arr[1]} ${lr_arr[0]} ${ul_arr[1]} -ts ${img1size[@]} $image2 ${image2%.tif}_resize.tif
     mv -v ${image2%.tif}_resize.tif $image2
+}
+
+get_last_element() {
+    myArr=("$@")
+    lastInd=$((${#myArr[@]}-1))
+    echo ${myArr[lastInd]}
 }
 
 # first, get the masked dems and put them into a folder creatively called MaskedDEMs
@@ -113,19 +119,15 @@ for dir in ${subList[@]}; do
         #finalcors=($(find . -regextype posix-extended -regex '^.*Correl_STD-MALT_Num_[0-9]{1}\.tif'))
         finalmsks=($(find . -regex '.*AutoMask_STD-MALT_Num_[0-9]\.tif' | sort))
         finalcors=($(find . -regex '.*Correl_STD-MALT_Num_[0-9]\.tif' | sort))
-		# find the last image name. ancient systems like RHEL6 don't like the -1 index.
-        lastimg=${finalimgs[-1]:2}
-        lastmsk=${finalmsks[-1]:2} # note that find will return ./AutoMask_...
-        lastcor=${finalcors[-1]:2}
+		# find the last image name. annoying systems like RHEL6, MacOS don't like the -1 index.
+        #lastimg=${finalimgs[-1]:2}
+        #lastmsk=${finalmsks[-1]:2} # note that find will return ./AutoMask_...
+        #lastcor=${finalcors[-1]:2}
 		# here's the kludge that should work on all bash systems, even
-		# the ancient ones like RHEL6.
-		#imgind=$((${#finalimgs[@]}-1))
-		#mskind=$((${#finalmsks[@]}-1))
-		#corind=$((${#finalcors[@]}-1))
-
-		#lastimg=${finalimgs[imgind]}
-		#lastmsk=${finalmsks[mskind]}
-		#lastcor=${finalmsks[corind]}
+		# the annoying ones like RHEL6 and MacOS
+		lastimg=$(basename $(get_last_element "${finalimgs[@]}"))
+        lastmsk=$(basename $(get_last_element "${finalmsks[@]}"))
+        lastcor=$(basename $(get_last_element "${finalcors[@]}"))
 
 		# strip the extension
         laststr="${lastimg%.*}"
