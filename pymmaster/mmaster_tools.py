@@ -31,7 +31,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from shapely.geometry.polygon import Polygon, orient
 from shapely.geometry import mapping, LineString, Point
 from shapely.ops import cascaded_union, transform
-from pybob.coreg_tools import dem_coregistration, false_hillshade, get_slope, create_stable_mask
+from pybob.coreg_tools import dem_coregistration, false_hillshade, get_slope, create_stable_mask, RMSE
 from pybob.GeoImg import GeoImg
 from pybob.image_tools import nanmedian_filter
 from pybob.plot_tools import plot_shaded_dem
@@ -396,23 +396,6 @@ def mask_raster_threshold(rasname, maskname, outfilename, threshold=50, datatype
     myras.write(outfilename, driver='GTiff', dtype=datatype)
 
     return myras
-
-
-# can probably just import this from pybob.coreg_tools, no?
-def rmse(indata):
-    """
-    Return root mean square of input differences.
-
-    :param indata: differences to calculate RMSE of
-    :type indata: array-like
-
-    :returns data_rmse: RMSE of input data.
-    """
-    # add 3x std dev filter
-    #    indata[np.abs(indata)>3*np.nanstd(indata)] = np.nan
-
-    myrmse = np.sqrt(np.nanmean(np.square(np.asarray(indata))))
-    return myrmse
 
 
 def calculate_dH(mst_dem, slv_dem, pts):
@@ -922,8 +905,8 @@ def final_histogram(dH0, dH1, dH2, dHfinal, pp):
     jjj1, jjj2 = np.histogram(dH2[np.isfinite(dH2)], bins=mybins, range=(-60, 60))
     k1, k2 = np.histogram(dHfinal[np.isfinite(dHfinal)], bins=mybins, range=(-60, 60))
 
-    stats0 = [np.nanmean(dH0), np.nanmedian(dH0), np.nanstd(dH0), rmse(dH0)]
-    stats_fin = [np.nanmean(dHfinal), np.nanmedian(dHfinal), np.nanstd(dHfinal), rmse(dHfinal)]
+    stats0 = [np.nanmean(dH0), np.nanmedian(dH0), np.nanstd(dH0), RMSE(dH0)]
+    stats_fin = [np.nanmean(dHfinal), np.nanmedian(dHfinal), np.nanstd(dHfinal), RMSE(dHfinal)]
 
     plt.plot(j2[1:], j1, 'k-', linewidth=2, label="original")
     plt.plot(jj2[1:], jj1, 'b-', linewidth=2, label="After X-track")
@@ -977,7 +960,7 @@ def correct_cross_track_bias(mst_dem, slv_dem, inang, pp, pts=False):
     pcoef, myorder = robust_polynomial_fit(xx, dH)
     polymod = fitfun_polynomial(xx, pcoef)
     polymod_grp = fitfun_polynomial(xx2, pcoef)
-    polyres = rmse(dH - polymod)
+    polyres = RMSE(dH - polymod)
     print("Cross track robust Polynomial RMSE (all data): ", polyres)
 
     #   # USING POLYFIT With ALL/GROUPED data
