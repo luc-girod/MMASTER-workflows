@@ -39,18 +39,18 @@ while getopts "z:o:d:h" opt; do
       sub_set=1
       ;;
     \?)
-      echo "RunMicMacAster.sh: Invalid option: -$OPTARG" >&2
+      echo "PostProcessMicMac.sh: Invalid option: -$OPTARG" >&2
       exit 1
       ;;
     :)
-      echo "RunMicMacAster.sh: Option -$OPTARG requires an argument." >&2
+      echo "PostProcessMicMac.sh: Option -$OPTARG requires an argument." >&2
       exit 1
       ;;
   esac
 done
 
 if [ "$proj_set" = "0" ]; then
-  echo "RunMicMacAster.sh: projection must be set using either -z or -o flags." >&2
+  echo "PostProcessMicMac.sh: projection must be set using either -z or -o flags." >&2
   exit 1
 fi
 

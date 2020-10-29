@@ -214,38 +214,92 @@ fi
 mm3d Malt Ortho ".*$name(()|_3N|_3B).tif" GRIBin ImMNT="$name(_3N|_3B).tif" ImOrtho="FalseColor_$name.tif" MOri=GRID ZInc=$Inc ZMoy=$Mean ZoomF=$ZoomF ZoomI=32 ResolTerrain=10 NbVI=2 EZA=1 DefCor=0 Regul=0.1 ResolOrtho=1  SzW=$SzW
 mm3d Tawny Ortho-MEC-Malt/ RadiomEgal=0
 
-if [ "$do_ply" = true ]; then
-    mm3d Nuage2Ply MEC-Malt/NuageImProf_STD-MALT_Etape_9.xml Out=$name.ply Attr=Ortho-MEC-Malt/Orthophotomosaic.tif
-fi
-
+#Check if things need to be tiled
+echo 
+echo "Trying to see if tiling needs to be done"
+echo 
 cd MEC-Malt
-if [ -f Correl_STD-MALT_Num_8_Tile_0_0.tif ]; then
-	mosaic_micmac_tiles.py -filename 'Correl_STD-MALT_Num_8'
-fi
-mv Correl_STD-MALT_Num_8.tif Correl_STD-MALT_Num_8_FullRes.tif
-cp Z_Num9_DeZoom1_STD-MALT.tfw Correl_STD-MALT_Num_8_FullRes.tfw
-gdal_translate -tr $RESTERR $RESTERR -a_srs "$proj" Correl_STD-MALT_Num_8_FullRes.tif Correl_STD-MALT_Num_8.tif
 
-if [ -f AutoMask_STD-MALT_Num_8_Tile_0_0.tif ]; then
-	mosaic_micmac_tiles.py -filename 'AutoMask_STD-MALT_Num_8'
-fi
-mv AutoMask_STD-MALT_Num_8.tif AutoMask_STD-MALT_Num_8_FullRes.tif
-cp Z_Num9_DeZoom1_STD-MALT.tfw AutoMask_STD-MALT_Num_8_FullRes.tfw
-gdal_translate -tr $RESTERR $RESTERR -a_srs "$proj" AutoMask_STD-MALT_Num_8_FullRes.tif AutoMask_STD-MALT_Num_8.tif
+if [[ $(ls Z_Num*_DeZoom*_STD-MALT_Tile_*.tif) ]]; then
 
-if [ -f Z_Num9_DeZoom1_STD-MALT_Tile_0_0.tif ]; then
-	mosaic_micmac_tiles.py -filename 'Z_Num9_DeZoom1_STD-MALT' 
-fi
-mv Z_Num9_DeZoom1_STD-MALT.tif Z_Num9_DeZoom1_STD-MALT_FullRes.tif
-mv Z_Num9_DeZoom1_STD-MALT.tfw Z_Num9_DeZoom1_STD-MALT_FullRes.tfw
-mv Z_Num9_DeZoom1_STD-MALT.xml Z_Num9_DeZoom1_STD-MALT_FullRes.xml
+finalDEMs=($(ls Z_Num*_DeZoom*_STD-MALT_Tile_*.tif))
+finalMasks=($(ls AutoMask_STD-MALT_Num_*_Tile_*.tif))
+finalcors=($(ls Correl_STD-MALT_Num*_Tile_*.tif))
+DEMind=$((${#finalDEMs[@]}-1))
+Maskind=$((${#finalMasks[@]}-1))
+corind=$((${#finalcors[@]}-1))
+lastDEM=${finalDEMs[DEMind]}
+lastMask=${finalMasks[Maskind]}
+lastcor=${finalcors[corind]}
+laststr="${lastDEM%.*}"
+Maskstr="${lastMask%.*}"
+corrstr="${lastcor%.*}"
 
-gdal_translate -tr $RESTERR $RESTERR -r cubicspline -a_srs "$proj" -co TFW=YES Z_Num9_DeZoom1_STD-MALT_FullRes.tif Z_Num9_DeZoom1_STD-MALT.tif
+if [ -f $lastcor ]; then
+	mosaic_micmac_tiles.py -filename '${lastcor:0:${#lastcor}-13}'
+fi
+if [ -f $lastMask ]; then
+	mosaic_micmac_tiles.py -filename '${$lastMASK:0:${#$lastMASK}-13}'
+fi
+if [ -f $lastDEM ]; then
+	mosaic_micmac_tiles.py -filename '${$lastDEM:0:${#$lastDEM}-13}'
+fi
+
+rm *Tile*.tif
+echo 
+	echo "Tiling done"
+echo 
+else
+echo 
+	echo "No tiling to be done"
+echo 
+fi
 cd ..
+
+
+# find the max value of Num (with standard ZoomF, 8 and 9)
+cd MEC-Malt
+finalDEMs=($(ls Z_Num*_DeZoom*_STD-MALT.tif))
+finalMasks=($(ls AutoMask_STD-MALT_Num_*.tif))
+finalcors=($(ls Correl_STD-MALT_Num*.tif))
+finalNuages=($(ls NuageImProf_STD-MALT_Etape_*.xml))
+DEMind=$((${#finalDEMs[@]}-1))
+Maskind=$((${#finalMasks[@]}-1))
+corind=$((${#finalcors[@]}-1))
+Nuageind=$((${#finalNuages[@]}-1))
+lastDEM=${finalDEMs[DEMind]}
+lastMask=${finalMasks[Maskind]}
+lastcor=${finalcors[corind]}
+lastNuage=${finalNuages[Nuageind]}
+laststr="${lastDEM%.*}"
+Maskstr="${lastMask%.*}"
+corrstr="${lastcor%.*}"
+
+# make geotif files out the tif+tfw
+mv $lastcor Correl_FullRes.tif
+cp $laststr.tfw Correl_FullRes.tfw
+gdal_translate -tr $RESTERR $RESTERR -a_srs "$proj" Correl_FullRes.tif $lastcor
+
+
+mv $lastMask AutoMask_FullRes.tif
+cp $laststr.tfw AutoMask_FullRes.tfw
+gdal_translate -tr $RESTERR $RESTERR -a_srs "$proj" AutoMask_FullRes.tif $lastMask
+
+
+mv $lastDEM Z_FullRes.tif
+mv $laststr.tfw Z_FullRes.tfw
+mv $laststr.xml Z_FullRes.xml
+
+gdal_translate -tr $RESTERR $RESTERR -r cubicspline -a_srs "$proj" -co TFW=YES Z_FullRes.tif $lastDEM
+cd ..
+
+if [ "$do_ply" = true ]; then
+    mm3d Nuage2Ply MEC-Malt/$lastNuage Out=$name.ply Attr=Ortho-MEC-Malt/Orthophotomosaic.tif
+fi
 
 if [ "$do_angle" = true ]; then
 	# computing orbit angles on DEM
-	mm3d SateLib ASTERProjAngle MEC-Malt/Z_Num9_DeZoom1_STD-MALT MEC-Malt/AutoMask_STD-MALT_Num_8.tif $name$N
+	mm3d SateLib ASTERProjAngle MEC-Malt/$laststr MEC-Malt/$lastMask $name$N
 	if [ -f TrackAngleMap_3N_Tile_0_0.tif ]; then
 		mosaic_micmac_tiles.py -filename 'TrackAngleMap_3N'
 	fi
@@ -253,11 +307,11 @@ if [ "$do_angle" = true ]; then
 	mv TrackAngleMap.tif TrackAngleMap_nonGT.tif
 	gdal_translate -a_srs "$proj" -a_nodata 0 TrackAngleMap_nonGT.tif TrackAngleMap_3N.tif
 	rm TrackAngleMap_nonGT*
-	mm3d SateLib ASTERProjAngle MEC-Malt/Z_Num9_DeZoom1_STD-MALT MEC-Malt/AutoMask_STD-MALT_Num_8.tif $name$B
+	mm3d SateLib ASTERProjAngle MEC-Malt/$laststr MEC-Malt/$lastMask $name$B
 	if [ -f TrackAngleMap_3B_Tile_0_0.tif ]; then
 		mosaic_micmac_tiles.py -filename 'TrackAngleMap_3B'
 	fi
-	cp MEC-Malt/Z_Num9_DeZoom1_STD-MALT.tfw TrackAngleMap_nonGT.tfw
+	cp MEC-Malt/$laststr.tfw TrackAngleMap_nonGT.tfw
 	mv TrackAngleMap.tif TrackAngleMap_nonGT.tif
 	gdal_translate -a_srs "$proj" -a_nodata 0 TrackAngleMap_nonGT.tif TrackAngleMap_3B.tif
 	rm TrackAngleMap_nonGT*
