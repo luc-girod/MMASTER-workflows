@@ -17,5 +17,5 @@ setup(name='pymmaster',
                'bin/CleanMicMac.sh', 'bin/Link_MMASTER_Files.sh', 'bin/PostProcessMicMac.sh', 'bin/process_l1a.sh',
                'bin/process_mmaster.sh', 'bin/RunMicMacAster_batch.sh', 'bin/wget_l1a.sh',
                'bin/WorkFlow_WaterMask.sh', 'bin/WorkFlowASTER.sh',
-               'bin/WorkFlowASTER_onescene.sh', 'bin/WorkFlowASTER_onestrip.sh', 'bin/wrapper_region_sbatch.sh'],
+               'bin/wrapper_region_sbatch.sh'],
       zip_safe=False)

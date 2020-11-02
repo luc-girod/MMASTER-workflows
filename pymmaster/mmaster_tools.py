@@ -335,7 +335,7 @@ def preprocess(mst_dem, slv_dem, glacmask=None, landmask=None, work_dir='.', out
     mask_name = os.path.sep.join([work_dir, '{}_CORR.tif'.format(ast_name)])
     slv_name = os.path.sep.join([work_dir, '{}_filtZ.tif'.format(ast_name)])
     # filter DEM using correlation mask !!! NEED to update to allow for either GeoIMG or pathname as INPUT
-    mask_raster_threshold(slv_dem, mask_name, slv_name, 60, np.float32)
+    mask_raster_threshold(slv_dem, mask_name, slv_name, 35, np.float32)
 
     # co-register master, slave
     coreg_dir = os.path.sep.join([out_dir, 'coreg'])
