@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='pymmaster',
-      version='0.1',
+      version='0.1.1',
       description='pymmaster is a python package for processing of ASTER DEMs using MMASTER.',
       url='https://github.com/luc-girod/MMASTER-workflows',
       author='Luc Girod, Romain Hugonnet, Chris Nuth, Bob McNabb',
@@ -10,7 +10,7 @@ setup(name='pymmaster',
       packages=['pymmaster'],
       install_requires=['fiona', 'gdal', 'geopandas', 'h5py',
                         'matplotlib', 'numpy', 'pandas', 'pyproj',
-                        'pybob>=0.25', 'scikit-image', 'scipy', 'shapely'],
+                        'pybob>0.25', 'scikit-image', 'scipy', 'shapely'],
       scripts=['bin/apply_mmaster_corrections.py', 'bin/batch_coregister_tiles.py', 'bin/bias_correct_tiles.py',
                'bin/create_micmac_xml.py', 'bin/mmaster_bias_correction.py',
                'bin/mosaic_micmac_tiles.py', 'bin/sort_aster_strips.py', 'bin/sort_l1a.py',
