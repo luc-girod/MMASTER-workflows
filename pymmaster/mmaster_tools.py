@@ -14,8 +14,7 @@ import errno
 import pyproj
 import numpy as np
 import numpy.polynomial.polynomial as poly
-import gdal
-import ogr
+from osgeo import ogr, gdal
 import fiona
 import fiona.crs
 import matplotlib.pylab as plt
