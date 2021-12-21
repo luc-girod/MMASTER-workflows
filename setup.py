@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 readme = Path(__file__).parent / 'README.md'
 
 setup(name='pymmaster',
-      version='0.1.2',
+      version='0.1.2-dev',
       description='pymmaster is a python package for processing of ASTER DEMs using MMASTER.',
       long_description=readme.read_text(),
       long_description_content_type='text/markdown',
