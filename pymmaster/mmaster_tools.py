@@ -181,12 +181,12 @@ def nmad(data):
     return np.nanmedian(np.abs(data) - np.nanmedian(data))
 
 
-def get_aster_footprint(gran_name, proj4='+units=m +init=epsg:4326', indir=None, polyout=True):
+def get_aster_footprint(gran_name, proj4='epsg:4326', indir=None, polyout=True):
     """
     Create shapefile of ASTER footprint from .met file
 
     :param gran_name: ASTER granule name to use; assumed to also be the folder in which .met file(s) are stored.
-    :param proj4: proj4 representation for coordinate system to use [default: '+units=m +init=epsg:4326', WGS84 Lat/Lon].
+    :param proj4: proj4 representation for coordinate system to use [default: 'epsg:4326', WGS84 Lat/Lon].
     :param indir: Directory to search in [default: current working directory].
     :param polyout: Create a shapefile of the footprint in the input directory [True].
 
@@ -227,12 +227,12 @@ def get_aster_footprint(gran_name, proj4='+units=m +init=epsg:4326', indir=None,
         lats = [float(val) for val in latvalstr.strip('VALUE  = ()').split(',')]
         lons = [float(val) for val in lonvalstr.strip('VALUE  = ()').split(',')]
 
-        coords = list(zip(lons, lats))
+        coords = list(zip(lats, lons))
         footprints.append(Polygon(coords))
 
     footprint = cascaded_union(footprints)
     footprint = footprint.simplify(0.0001)
-    outprint = reproject_geometry(footprint, {'init': 'epsg:4326'}, proj4)
+    outprint = reproject_geometry(footprint, 'epsg:4326', proj4)
     if polyout:
         outshape.write({'properties': {'id': 1}, 'geometry': mapping(outprint)})
         outshape.close()
