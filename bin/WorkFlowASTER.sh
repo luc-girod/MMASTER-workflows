@@ -198,7 +198,7 @@ mm3d Malt Ortho ".*$name(()|_3N|_3B).tif" GRIBin ImMNT="$name(_3N|_3B).tif" ImOr
 fi
 
 #Applying correction to the 3B image
-mm3d SateLib ApplyParallaxCor $name$Bt GeoI-Px/Px2_Num16_DeZoom1_Geom-Im.tif FitASTER=$fitVersion ExportFitASTER=1 ASTERSceneName=$name
+mm3d SateLib ApplyParralaxCor $name$Bt GeoI-Px/Px2_Num16_DeZoom1_Geom-Im.tif FitASTER=$fitVersion ExportFitASTER=1 ASTERSceneName=$name
 mkdir ImOrig
 mv $name$Bt ImOrig/$name$Bt
 mv $name$Bcor $name$Bt
