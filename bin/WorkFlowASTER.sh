@@ -23,7 +23,7 @@ nameWaterMask=false
 do_ply=false
 do_angle=false
 NoCorDEM=false
-fitVersion=2
+fitVersion=1
 
 while getopts "s:z:o:c:q:wnf:t:y:ai:h" opt; do
   case $opt in
@@ -41,7 +41,7 @@ while getopts "s:z:o:c:q:wnf:t:y:ai:h" opt; do
       echo "    -t RESTERR     : Run with different terrain resolution (optional; default: 30)"
       echo "    -y do_ply      : Write point cloud (DEM drapped with ortho in ply)"
       echo "    -a do_angle    : Compute track angle along orbit"
-      echo "    -i fitVersion  : Version of Cross-track FitASTER to be used (default 2, 1 availiable)"
+      echo "    -i fitVersion  : Version of Cross-track FitASTER to be used (default 1, 1 availiable)"
       echo "    -h             : displays this message and exits."
       echo " "
       exit 0
@@ -198,7 +198,7 @@ mm3d Malt Ortho ".*$name(()|_3N|_3B).tif" GRIBin ImMNT="$name(_3N|_3B).tif" ImOr
 fi
 
 #Applying correction to the 3B image
-mm3d SateLib ApplyParralaxCor $name$Bt GeoI-Px/Px2_Num16_DeZoom1_Geom-Im.tif FitASTER=$fitVersion ExportFitASTER=1 ASTERSceneName=$name
+mm3d SateLib ApplyParralaxCor $name$Bt GeoI-Px/Px2_Num16_DeZoom1_Geom-Im.tif FitASTER=$fitVersion 
 mkdir ImOrig
 mv $name$Bt ImOrig/$name$Bt
 mv $name$Bcor $name$Bt
