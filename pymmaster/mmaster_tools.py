@@ -1001,8 +1001,10 @@ def get_filtered_along_track(mst_dem, slv_dem, ang_maps, pts):
     # create mask for dh and xx values    
     myix = np.isin(xxid, grp_xx[psize < pthresh], invert=True).flatten()
     # mask group values
-    grp_dH = np.delete(grp_dH, [psize < pthresh])
-    grp_xx = np.delete(grp_xx, [psize < pthresh])
+    #grp_dH = np.delete(grp_dH, [psize < pthresh])
+    #grp_xx = np.delete(grp_xx, [psize < pthresh])
+    grp_dH = np.delete(grp_dH, np.where(psize < pthresh))
+    grp_xx = np.delete(grp_xx, np.where(psize < pthresh))
     # # # # # # # # # # #
 
     yy = dH
