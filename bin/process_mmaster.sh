@@ -20,7 +20,7 @@ for dir in "$@"; do
     cd $dir
     for f in $(ls -d AST*/); do
         # be sure to change the utm zone
-        WorkFlowASTER.sh -s ${f%%/} -z "$utm" -a -i 2 > ${f%%/}.log
+        WorkFlowASTER.sh -s ${f%%/} -z "$utm" -a -i 1 -w 1 > ${f%%/}.log
     done
     # be sure to change the utm zone
     PostProcessMicMac.sh -z "$utm"
