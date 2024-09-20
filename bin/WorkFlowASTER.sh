@@ -111,9 +111,16 @@ if [ "$proj_set" = "0" ]; then
   exit 1
 fi
 
+# Cleaning erroneous "/" at the end of $name
+if [[ "$name" =~ /$ ]]; then
+    name="${name%/}"
+fi
+
 #Variable symboles
-echo $name
-echo $proj
+echo "********************************************************"
+echo "    Scene name:  " $name 
+echo "    Projection:  " $proj
+echo "********************************************************"
 cd $name
 pwd
 
@@ -127,19 +134,27 @@ find ./ -maxdepth 1 -name "*.zip" | while read filename; do
         mv "$f" "zips"
 done  
 
-echo "Moved and extracted zip files"
+echo "********************************************************"
+echo "*            Moved and extracted zip files             *"
+echo "********************************************************"
 
 find ./ -maxdepth 1 -name "*.met" | while read filename; do
     f=$(basename "$filename")
     mv "$f" "zips"
 done  
 
-echo "Moved met files"
+echo "********************************************************"
+echo "*                    Moved met files                   *"
+echo "********************************************************"
 
 pwd
 cd RawData
 pwd
+
 if [ "$nscenes" -gt "1" ]; then
+    echo "********************************************************"
+    echo "*  mm3d Satelib ASTERStrip2MM AST_L1A.* " $name"  *"
+    echo "********************************************************"
     mm3d Satelib ASTERStrip2MM AST_L1A.* $name
 else
     for f in $(ls *.*); do 
@@ -149,11 +164,22 @@ else
     mm3d SateLib ASTERGT2MM $name
 fi
 cd ..
+echo "********************************************************"
+echo "*                 Running Aster2Grid                   *"
+echo "********************************************************"
 
+echo "mm3d SateLib Aster2Grid "$name$Bx" 20 \""$proj"\" HMin=-500 HMax=9000 expDIMAP=1 expGrid=1"
 mm3d SateLib Aster2Grid $name$Bx 20 "$proj" HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
+echo "mm3d SateLib Aster2Grid "$name$Nx" 20 \""$proj"\" HMin=-500 HMax=9000 expDIMAP=1 expGrid=1"
 mm3d SateLib Aster2Grid $name$Nx 20 "$proj" HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
+echo "mm3d SateLib Aster2Grid \"FalseColor_"$name".xml\" 20 \""$proj"\" HMin=-500 HMax=9000 expDIMAP=1 expGrid=1"
 mm3d SateLib Aster2Grid "FalseColor_$name.xml" 20 "$proj" HMin=-500 HMax=9000 expDIMAP=1 expGrid=1
 
+echo "********************************************************"
+echo "*        Running low-resolution correlation            *"
+echo "********************************************************"
+
+echo "mm3d Malt Ortho \".*"$name"(()|_3N|_3B).tif\" GRIBin ImMNT=\""$name"(_3N|_3B).tif\" MOri=GRID ZMoy=2500 ZInc=2500 ZoomF=8 ZoomI=32 ResolTerrain=30 NbVI=2 EZA=1 Regul=0.1 DefCor="$CorThr" DoOrtho=0 DirMEC=MEC-Mini"
 mm3d Malt Ortho ".*$name(()|_3N|_3B).tif" GRIBin ImMNT="$name(_3N|_3B).tif" MOri=GRID ZMoy=2500 ZInc=2500 ZoomF=8 ZoomI=32 ResolTerrain=30 NbVI=2 EZA=1 Regul=0.1 DefCor=$CorThr DoOrtho=0 DirMEC=MEC-Mini
 
 gdalinfo -nomd -norat -noct -nofl -stats MEC-Mini/Z_Num6_DeZoom8_STD-MALT.tif > gdalinfo.txt
@@ -161,8 +187,10 @@ deminfo=$(grep 'Minimum' gdalinfo.txt)
 Min=$(echo $deminfo | cut -d, -f1 | tr -d ' ' | tr -d 'Minimum=' | xargs printf "%.0f")
 Max=$(echo $deminfo | cut -d, -f2 | tr -d ' ' | tr -d 'Maximum=' | xargs printf "%.0f")
 
-echo Min=$Min
-echo Max=$Max
+echo "********************************************************"
+echo "        low-res DEM Min = "$Min
+echo "        low-res DEM Max = "Max=$Max
+echo "********************************************************"
 
 #Filter obvious error in min/max (limit to earth min/max)
 if [ $Min -lt -420 ]; then Min=-420; fi # changed from Min=$((($Min)<-420 ? -420 : $Min)) because it breaks on Mac OS
@@ -185,11 +213,22 @@ echo Inc=$Inc
 echo Min Max NbLvl Mean Inc >> Stats.txt
 echo $Min $Max $NbLvl $Mean $Inc >> Stats.txt
 
-#Re compute RPCs with updated min/max
+echo "********************************************************"
+echo "*       Running Aster2Grid with updated min/max        *"
+echo "********************************************************"
+
+echo "mm3d SateLib Aster2Grid "$name$Bx" "$NbLvl" \""$proj"\" HMin="$Min" HMax="$Max" expDIMAP=1 expGrid=1"
 mm3d SateLib Aster2Grid $name$Bx $NbLvl "$proj" HMin=$Min HMax=$Max expDIMAP=1 expGrid=1
+echo "mm3d SateLib Aster2Grid "$name$Nx" "$NbLvl" \""$proj"\" HMin="$Min" HMax="$Max" expDIMAP=1 expGrid=1"
 mm3d SateLib Aster2Grid $name$Nx $NbLvl "$proj" HMin=$Min HMax=$Max expDIMAP=1 expGrid=1
+echo "mm3d SateLib Aster2Grid \"FalseColor_"$name".xml\" "$NbLvl" \""$proj"\" HMin="$Min" HMax="$Max" expDIMAP=1 expGrid=1"
 mm3d SateLib Aster2Grid "FalseColor_$name.xml" $NbLvl "$proj" HMin=$Min HMax=$Max expDIMAP=1 expGrid=1
 
+echo "********************************************************"
+echo "*           Computing raw cross-track bias             *"
+echo "********************************************************"
+
+echo "mm3d MMTestOrient "$name$Bt" "$name$Nt" GRIBin PB=1 MOri=GRID ZoomF=1 ZInc="$Inc" ZMoy="$Mean"
 mm3d MMTestOrient $name$Bt $name$Nt GRIBin PB=1 MOri=GRID ZoomF=1 ZInc=$Inc ZMoy=$Mean
 
 # if we want to compute the uncorrected DEM
@@ -197,7 +236,11 @@ if [ "$NoCorDEM" = true ]; then #check variable name!
 mm3d Malt Ortho ".*$name(()|_3N|_3B).tif" GRIBin ImMNT="$name(_3N|_3B).tif" ImOrtho="FalseColor_$name.tif" MOri=GRID ZInc=$Inc ZMoy=$Mean ZoomF=1 ZoomI=32 ResolTerrain=30 NbVI=2 EZA=1 DefCor=0 Regul=0.1 ResolOrtho=2 DirMEC=MEC-NoCor
 fi
 
-#Applying correction to the 3B image
+echo "********************************************************"
+echo "*         Applying correction to the 3B image          *"
+echo "********************************************************"
+
+echo "mm3d SateLib ApplyParallaxCor "$name$Bt" GeoI-Px/Px2_Num16_DeZoom1_Geom-Im.tif FitASTER="$fitVersion" ExportFitASTER=1 ASTERSceneName="$name
 mm3d SateLib ApplyParallaxCor $name$Bt GeoI-Px/Px2_Num16_DeZoom1_Geom-Im.tif FitASTER=$fitVersion ExportFitASTER=1 ASTERSceneName=$name
 mkdir ImOrig
 mv $name$Bt ImOrig/$name$Bt
@@ -211,7 +254,14 @@ fi
 # Correlation with corrected image
 #mm3d Malt Ortho ".*$name(|_3N|_3B).tif" GRIBin ImMNT="$name(_3N|_3B).tif" ImOrtho="FalseColor_$name.tif" MOri=GRID ZInc=$Inc ZMoy=$Mean ZoomF=$ZoomF ZoomI=32 ResolTerrain=$RESTERR NbVI=2 EZA=1 DefCor=0 Regul=0.1 ResolOrtho=2 SzW=$SzW ZPas=0.1
 # do we need to add something for a water mask above?
+
+echo "********************************************************"
+echo "*        Correlation with corrected image              *"
+echo "********************************************************"
+
+echo "mm3d Malt Ortho \".*"$name"(()|_3N|_3B).tif\" GRIBin ImMNT=\""$name"(_3N|_3B).tif\" ImOrtho=\"FalseColor_"$name".tif\" MOri=GRID ZInc="$Inc" ZMoy="$Mean" ZoomF="$ZoomF" ZoomI=32 ResolTerrain=10 NbVI=2 EZA=1 DefCor=0 Regul=0.1 ResolOrtho=1  SzW="$SzW
 mm3d Malt Ortho ".*$name(()|_3N|_3B).tif" GRIBin ImMNT="$name(_3N|_3B).tif" ImOrtho="FalseColor_$name.tif" MOri=GRID ZInc=$Inc ZMoy=$Mean ZoomF=$ZoomF ZoomI=32 ResolTerrain=10 NbVI=2 EZA=1 DefCor=0 Regul=0.1 ResolOrtho=1  SzW=$SzW
+echo "mm3d Tawny Ortho-MEC-Malt/ RadiomEgal=0"
 mm3d Tawny Ortho-MEC-Malt/ RadiomEgal=0
 
 #Check if things need to be tiled
