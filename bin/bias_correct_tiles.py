@@ -12,7 +12,7 @@ import matplotlib
 matplotlib.use('Agg')
 import numpy as np
 import geopandas as gpd
-import gdal
+from osgeo import gdal
 import pyproj
 from shapely.strtree import STRtree
 from pymmaster.mmaster_tools import mmaster_bias_removal, get_aster_footprint
@@ -44,7 +44,7 @@ def get_tiles(indir, master_tiles, s):
     dname = os.path.basename(indir.strip(os.path.sep))  # get the actual granule/folder name
     fprint = get_aster_footprint(indir, master_tiles.crs, indir=indir, polyout=False)
     my_proj = pyproj.Proj(master_tiles.crs)
-    if my_proj.is_latlong():
+    if '+proj=longlat' in my_proj.to_proj4():
         buff = buffer_conversion(fprint, 1000)
     else:
         unit = [st.split('=')[-1] for st in my_proj.srs.split(' ') if 'units' in st]
