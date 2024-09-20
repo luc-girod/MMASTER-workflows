@@ -969,7 +969,7 @@ def correct_cross_track_bias(mst_dem, slv_dem, inang, pp, pts=False):
     #    polyres=RMSE(dH-polymod)
     #    print("Cross track standard Polynomial RMSE (all data): ", polyres)
 
-    mytext = "Polynomial order: " + np.str(myorder)
+    mytext = "Polynomial order: " + str(myorder)
     plot_bias(xx, dH, grp_xx, grp_dH, 'Cross', pp, pmod=(xx2, polymod_grp), txt=mytext)
 
     # Generate correction for DEM
