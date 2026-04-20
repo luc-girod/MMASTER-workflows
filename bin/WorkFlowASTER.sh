@@ -228,7 +228,7 @@ echo "********************************************************"
 echo "*           Computing raw cross-track bias             *"
 echo "********************************************************"
 
-echo "mm3d MMTestOrient "$name$Bt" "$name$Nt" GRIBin PB=1 MOri=GRID ZoomF=1 ZInc="$Inc" ZMoy="$Mean"
+echo "mm3d MMTestOrient "$name$Bt" "$name$Nt" GRIBin PB=1 MOri=GRID ZoomF=1 ZInc="$Inc" ZMoy="$Mean
 mm3d MMTestOrient $name$Bt $name$Nt GRIBin PB=1 MOri=GRID ZoomF=1 ZInc=$Inc ZMoy=$Mean
 
 # if we want to compute the uncorrected DEM
